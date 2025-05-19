@@ -1,5 +1,9 @@
 package api
 
+import (
+	"fmt"
+)
+
 // Track represents a music track
 type Track struct {
 	ID       string
