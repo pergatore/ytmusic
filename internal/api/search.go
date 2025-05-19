@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 // Search searches for tracks on YouTube Music
@@ -295,10 +297,28 @@ func (api *YouTubeMusicAPI) Search(query string) ([]Track, error) {
 												if len(flexColumns) > 2 {
 													thirdColumn, isMap := flexColumns[2].(map[string]interface{})
 													if isMap {
-														// Just check if it exists, but don't assign to unused variable
-														if _, hasColumnRenderer := thirdColumn["musicResponsiveListItemFlexColumnRenderer"]; hasColumnRenderer {
-															// Extract plays or duration if available
-															// This is a simplified approach
+														if columnRenderer, hasColumnRenderer := thirdColumn["musicResponsiveListItemFlexColumnRenderer"]; hasColumnRenderer {
+															if columnRendererMap, isColumnRendererMap := columnRenderer.(map[string]interface{}); isColumnRendererMap {
+																if textObj, hasText := columnRendererMap["text"].(map[string]interface{}); hasText {
+																	if runs, hasRuns := textObj["runs"].([]interface{}); hasRuns && len(runs) > 0 {
+																		if firstRun, isRunMap := runs[0].(map[string]interface{}); isRunMap {
+																			if durationText, hasText := firstRun["text"].(string); hasText {
+																				api.LogDebug("Found duration text: %s", durationText)
+																				// Try to parse duration string (format could be like "3:45")
+																				parts := strings.Split(durationText, ":")
+																				if len(parts) == 2 {
+																					minutes, minErr := strconv.Atoi(parts[0])
+																					seconds, secErr := strconv.Atoi(parts[1])
+																					if minErr == nil && secErr == nil {
+																						duration = minutes*60 + seconds
+																						api.LogDebug("Parsed duration: %d seconds", duration)
+																					}
+																				}
+																			}
+																		}
+																	}
+																}
+															}
 														}
 													}
 												}
@@ -310,7 +330,7 @@ func (api *YouTubeMusicAPI) Search(query string) ([]Track, error) {
 													Duration:   duration,
 												}
 												tracks = append(tracks, track)
-												api.LogDebug("Added track: %s - %s (ID: %s)", title, artist, trackID)
+												api.LogDebug("Added track: %s - %s (ID: %s, Duration: %d seconds)", title, artist, trackID, duration)
 											} else {
 												api.LogDebug("Skipping track due to missing ID or title. ID: %s, Title: %s", trackID, title)
 											}

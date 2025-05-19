@@ -123,6 +123,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 					
+					// Check if we've played this track before and have its real duration
+					if m.CurrentTrack.ID == selectedItem.ID && m.Player.Duration > 0 {
+						// Update the duration of the selected track with the known duration
+						selectedItem.Duration = m.Player.Duration
+					}
+					
 					m.CurrentTrack = selectedItem
 					m.IsLoading = true
 					m.ErrorMsg = "" // Clear previous errors
@@ -172,6 +178,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err != nil {
 			m.ErrorMsg = "Error playing track: " + err.Error()
 			return m, nil
+		}
+		
+		// Important! Update the current track's duration with the real duration from the player
+		if m.Player.Duration > 0 && m.Player.Duration != m.CurrentTrack.Duration {
+			// Create a new copy of the track with the updated duration
+			updatedTrack := m.CurrentTrack
+			updatedTrack.Duration = m.Player.Duration
+			m.CurrentTrack = updatedTrack
+			
+			// Also update the track in the list if it's there
+			for i, item := range m.List.Items() {
+				track, ok := item.(api.Track)
+				if ok && track.ID == m.CurrentTrack.ID {
+					track.Duration = m.Player.Duration
+					m.List.SetItem(i, track)
+					break
+				}
+			}
 		}
 		
 		return m, ProgressTickCmd()

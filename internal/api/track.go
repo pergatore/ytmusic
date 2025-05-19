@@ -24,10 +24,8 @@ func (t Track) Title() string {
 
 // Description implements list.Item interface for displaying in the list
 func (t Track) Description() string {
-	// Format duration as MM:SS
-	minutes := t.Duration / 60
-	seconds := t.Duration % 60
-	return fmt.Sprintf("%s (%02d:%02d)", t.Artist, minutes, seconds)
+	// Just show the artist without duration
+	return t.Artist
 }
 
 // extractTrackIDFromOverlay extracts a track ID from the overlay renderer

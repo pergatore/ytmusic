@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -55,10 +57,44 @@ func (p *Player) Play(url string, duration int) error {
 		p.Stop()
 	}
 	
-	p.LogDebug("Playing URL: %s, duration: %d", url, duration)
+	p.LogDebug("Playing URL: %s, initial duration: %d", url, duration)
 	
+	// Use yt-dlp to get the actual duration
+	p.LogDebug("Trying to get accurate duration with yt-dlp")
+	cmdGetDuration := exec.Command("yt-dlp", "--get-duration", url)
+	output, err := cmdGetDuration.Output()
+	if err == nil {
+		durationStr := strings.TrimSpace(string(output))
+		p.LogDebug("Got duration string from yt-dlp: %s", durationStr)
+		
+		// Parse duration like "3:45" or "1:23:45"
+		parts := strings.Split(durationStr, ":")
+		newDuration := 0
+		
+		if len(parts) == 2 {
+			// MM:SS format
+			minutes, _ := strconv.Atoi(parts[0])
+			seconds, _ := strconv.Atoi(parts[1])
+			newDuration = minutes*60 + seconds
+		} else if len(parts) == 3 {
+			// HH:MM:SS format
+			hours, _ := strconv.Atoi(parts[0])
+			minutes, _ := strconv.Atoi(parts[1])
+			seconds, _ := strconv.Atoi(parts[2])
+			newDuration = hours*3600 + minutes*60 + seconds
+		}
+		
+		if newDuration > 0 {
+			p.LogDebug("Setting new duration: %d seconds (was %d seconds)", newDuration, duration)
+			duration = newDuration
+		}
+	} else {
+		p.LogDebug("Failed to get duration with yt-dlp: %v", err)
+	}
+	
+	// Now play with mpv
 	p.cmd = exec.Command("mpv", "--no-video", "--no-terminal", url)
-	err := p.cmd.Start()
+	err = p.cmd.Start()
 	if err != nil {
 		p.LogDebug("Error starting mpv: %v", err)
 		return err
