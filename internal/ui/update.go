@@ -140,11 +140,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 		if msg.err != nil {
 			m.ErrorMsg = "Search error: " + msg.err.Error()
+			m.SearchResults = 0
 			return m, nil
 		}
 		
 		if len(msg.tracks) == 0 {
 			m.ErrorMsg = "No results found for: " + m.SearchInput.Value()
+			m.SearchResults = 0
 			return m, nil
 		}
 		
@@ -155,6 +157,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 		m.List.SetItems(items)
 		m.SearchInput.SetValue("")
+		m.SearchResults = len(msg.tracks)
 		return m, nil
 		
 	case streamURLMsg:
@@ -202,7 +205,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Height = msg.Height
 		
 		m.List.SetWidth(msg.Width - 4)
-		m.List.SetHeight(msg.Height - 10)
+		
+		// Make sure the list height adapts to smaller windows
+		height := msg.Height - 10
+		if height < 3 {
+			height = 3 // Minimum height to show at least one item
+		}
+		m.List.SetHeight(height)
 		
 		m.Progress.Width = msg.Width - 10
 		

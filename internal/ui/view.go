@@ -39,6 +39,11 @@ func (m *Model) View() string {
 		s.WriteString(errorStyle.Render(m.ErrorMsg) + "\n\n")
 	}
 	
+	// Search results info
+	if m.SearchResults > 0 && !m.SearchMode {
+		s.WriteString(resultInfoStyle.Render(fmt.Sprintf("Found %d tracks. Use ↑/↓ to navigate and Enter to play.\n\n", m.SearchResults)))
+	}
+	
 	// Search or music list
 	listView := m.List.View()
 	
@@ -65,7 +70,7 @@ func (m *Model) View() string {
 		currentlyPlaying = fmt.Sprintf(
 			"%s %s - %s\n%s\n%s",
 			playStatus,
-			playingStyle.Render(m.CurrentTrack.Title),
+			playingStyle.Render(m.CurrentTrack.TrackTitle), // Changed from Title to TrackTitle
 			infoStyle.Render(m.CurrentTrack.Artist),
 			progressBar,
 			timeInfo,

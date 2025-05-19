@@ -6,14 +6,29 @@ import (
 
 // Track represents a music track
 type Track struct {
-	ID       string
-	Title    string
-	Artist   string
-	Duration int // in seconds
+	ID         string
+	TrackTitle string // Renamed from Title to TrackTitle
+	Artist     string
+	Duration   int // in seconds
 }
 
-// For list.Item interface
-func (t Track) FilterValue() string { return t.Title + " " + t.Artist }
+// FilterValue implements list.Item interface for filtering
+func (t Track) FilterValue() string { 
+	return t.TrackTitle + " " + t.Artist 
+}
+
+// Title implements list.Item interface for displaying in the list
+func (t Track) Title() string {
+	return t.TrackTitle
+}
+
+// Description implements list.Item interface for displaying in the list
+func (t Track) Description() string {
+	// Format duration as MM:SS
+	minutes := t.Duration / 60
+	seconds := t.Duration % 60
+	return fmt.Sprintf("%s (%02d:%02d)", t.Artist, minutes, seconds)
+}
 
 // extractTrackIDFromOverlay extracts a track ID from the overlay renderer
 func (api *YouTubeMusicAPI) extractTrackIDFromOverlay(rendererMap map[string]interface{}) (string, error) {

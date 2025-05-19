@@ -46,6 +46,10 @@ var (
 	warningStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFAA00")).
 		Bold(true)
+		
+	resultInfoStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#AAAAAA")).
+		Italic(true)
 )
 
 // Model is the main application model
@@ -65,6 +69,7 @@ type Model struct {
 	IsLoading    bool
 	ErrorMsg     string
 	DebugMode    bool
+	SearchResults int  // New field to track number of search results
 }
 
 // InitialModel creates the initial application model
@@ -72,11 +77,31 @@ func InitialModel(debugMode bool) *Model {
 	// Initialize API
 	ytApi := api.NewYouTubeMusicAPI(debugMode)
 	
-	// Initialize list with delegate for our custom Track type
+	// Initialize list with custom delegate for better track display
 	delegate := list.NewDefaultDelegate()
+	
+	// Customize the delegate styles for better visual appearance
+	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Bold(true)
+		
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.
+		Foreground(lipgloss.Color("#AAAAAA"))
+	
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
+		Foreground(lipgloss.Color("#000000")).
+		Background(lipgloss.Color("#ff0000")).
+		Bold(true)
+	
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
+		Foreground(lipgloss.Color("#000000")).
+		Background(lipgloss.Color("#ff0000"))
+	
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = "YouTube Music"
-	l.SetShowStatusBar(false)
+	l.SetShowTitle(true)
+	l.SetShowHelp(false)
+	l.SetShowStatusBar(true)  // Enable the status bar to show the index
 	l.SetFilteringEnabled(false)
 	l.Styles.Title = titleStyle
 	
@@ -94,17 +119,18 @@ func InitialModel(debugMode bool) *Model {
 	s.Spinner = spinner.Dot
 	
 	return &Model{
-		Api:         ytApi,
-		Player:      player.NewPlayer(debugMode),
-		List:        l,
-		SearchInput: ti,
-		Progress:    p,
-		Spinner:     s,
-		SearchMode:  false,
-		LoginMode:   !ytApi.IsLoggedIn,
-		ResetMode:   false,
-		IsLoading:   false,
-		DebugMode:   debugMode,
+		Api:          ytApi,
+		Player:       player.NewPlayer(debugMode),
+		List:         l,
+		SearchInput:  ti,
+		Progress:     p,
+		Spinner:      s,
+		SearchMode:   false,
+		LoginMode:    !ytApi.IsLoggedIn,
+		ResetMode:    false,
+		IsLoading:    false,
+		DebugMode:    debugMode,
+		SearchResults: 0,
 	}
 }
 

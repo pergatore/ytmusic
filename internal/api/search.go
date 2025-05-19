@@ -304,10 +304,10 @@ func (api *YouTubeMusicAPI) Search(query string) ([]Track, error) {
 												}
 												
 												track := Track{
-													ID:       trackID,
-													Title:    title,
-													Artist:   artist,
-													Duration: duration,
+													ID:         trackID,
+													TrackTitle: title, // Changed from Title to TrackTitle
+													Artist:     artist,
+													Duration:   duration,
 												}
 												tracks = append(tracks, track)
 												api.LogDebug("Added track: %s - %s (ID: %s)", title, artist, trackID)
@@ -344,8 +344,8 @@ func (api *YouTubeMusicAPI) Search(query string) ([]Track, error) {
 	if len(tracks) == 0 {
 		api.LogDebug("No tracks found in search results, returning mock data")
 		tracks = []Track{
-			{ID: "dQw4w9WgXcQ", Title: "Sample: " + query, Artist: "Try another search term", Duration: 180},
-			{ID: "xvFZjo5PgG0", Title: "Demo song", Artist: "Click to play a demo", Duration: 240},
+			{ID: "dQw4w9WgXcQ", TrackTitle: "Sample: " + query, Artist: "Try another search term", Duration: 180}, // Changed from Title to TrackTitle
+			{ID: "xvFZjo5PgG0", TrackTitle: "Demo song", Artist: "Click to play a demo", Duration: 240}, // Changed from Title to TrackTitle
 		}
 	}
 	
