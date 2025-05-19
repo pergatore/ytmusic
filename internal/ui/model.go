@@ -68,7 +68,7 @@ type Model struct {
 }
 
 // InitialModel creates the initial application model
-func InitialModel(debugMode bool) Model {
+func InitialModel(debugMode bool) *Model {
 	// Initialize API
 	ytApi := api.NewYouTubeMusicAPI(debugMode)
 	
@@ -93,7 +93,7 @@ func InitialModel(debugMode bool) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	
-	return Model{
+	return &Model{
 		Api:         ytApi,
 		Player:      player.NewPlayer(debugMode),
 		List:        l,
@@ -109,7 +109,7 @@ func InitialModel(debugMode bool) Model {
 }
 
 // Init initializes the model
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.Spinner.Tick,
 		CheckLoginCmd(m.Api),
