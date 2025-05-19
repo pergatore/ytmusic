@@ -99,106 +99,233 @@ func (api *YouTubeMusicAPI) Search(query string) ([]Track, error) {
 	// Extract tracks from the response
 	var tracks []Track
 	
-	// Extract from the main structure
+	// Extract from the main structure with the correct path
 	contents, contentsOk := result["contents"].(map[string]interface{})
 	if contentsOk {
-		sectionList, sectionOk := contents["sectionListRenderer"].(map[string]interface{})
-		if sectionOk {
-			sections, sectionsOk := sectionList["contents"].([]interface{})
-			if sectionsOk && len(sections) > 0 {
-				api.LogDebug("Processing %d sections in search results", len(sections))
+		api.LogDebug("Found top-level 'contents' object")
+		
+		tabbedResults, tabbedOk := contents["tabbedSearchResultsRenderer"].(map[string]interface{})
+		if tabbedOk {
+			api.LogDebug("Found 'tabbedSearchResultsRenderer' object")
+			
+			tabs, tabsOk := tabbedResults["tabs"].([]interface{})
+			if tabsOk && len(tabs) > 0 {
+				api.LogDebug("Found %d tabs in results", len(tabs))
 				
-				// Process each section
-				for _, section := range sections {
-					sectionMap, isMap := section.(map[string]interface{})
-					if !isMap {
-						continue
-					}
+				// Usually the first tab has the results
+				tabRenderer, tabOk := tabs[0].(map[string]interface{})
+				if tabOk {
+					api.LogDebug("Processing tab 0")
 					
-					musicShelf, hasMusicShelf := sectionMap["musicShelfRenderer"]
-					if !hasMusicShelf {
-						continue
-					}
-					
-					musicShelfMap, isMusicShelfMap := musicShelf.(map[string]interface{})
-					if !isMusicShelfMap {
-						continue
-					}
-					
-					contentItems, hasContents := musicShelfMap["contents"].([]interface{})
-					if !hasContents {
-						continue
-					}
-					
-					api.LogDebug("Found music shelf with %d items", len(contentItems))
-					
-					// Process each track item
-					for _, item := range contentItems {
-						itemMap, isItemMap := item.(map[string]interface{})
-						if !isItemMap {
-							continue
-						}
+					tabContent, contentOk := tabRenderer["tabRenderer"].(map[string]interface{})
+					if contentOk {
+						api.LogDebug("Found 'tabRenderer' object")
 						
-						renderer, hasRenderer := itemMap["musicResponsiveListItemRenderer"]
-						if !hasRenderer {
-							continue
-						}
-						
-						rendererMap, isRendererMap := renderer.(map[string]interface{})
-						if !isRendererMap {
-							continue
-						}
-						
-						// Extract track info
-						flexColumns, hasFlexColumns := rendererMap["flexColumns"].([]interface{})
-						if !hasFlexColumns || len(flexColumns) < 2 {
-							continue
-						}
-						
-						// Safely extract title
-						var title, artist, trackID string
-						
-						// Title is usually in the first flex column
-						firstColumn, isMap := flexColumns[0].(map[string]interface{})
-						if isMap {
-							columnRenderer, hasColumnRenderer := firstColumn["musicResponsiveListItemFlexColumnRenderer"]
-							if hasColumnRenderer {
-								columnRendererMap, isColumnRendererMap := columnRenderer.(map[string]interface{})
-								if isColumnRendererMap {
-									textObj, hasText := columnRendererMap["text"].(map[string]interface{})
-									if hasText {
-										runs, hasRuns := textObj["runs"].([]interface{})
-										if hasRuns && len(runs) > 0 {
-											firstRun, isRunMap := runs[0].(map[string]interface{})
-											if isRunMap {
-												titleText, hasText := firstRun["text"].(string)
-												if hasText {
-													title = titleText
+						content, hasContent := tabContent["content"].(map[string]interface{})
+						if hasContent {
+							api.LogDebug("Found 'content' object in tabRenderer")
+							
+							sectionList, hasSectionList := content["sectionListRenderer"].(map[string]interface{})
+							if hasSectionList {
+								api.LogDebug("Found 'sectionListRenderer' object")
+								
+								sections, sectionsOk := sectionList["contents"].([]interface{})
+								if sectionsOk && len(sections) > 0 {
+									api.LogDebug("Processing %d sections in search results", len(sections))
+									
+									// Process each section
+									for i, section := range sections {
+										sectionMap, isMap := section.(map[string]interface{})
+										if !isMap {
+											api.LogDebug("Section %d is not a map, skipping", i)
+											continue
+										}
+										
+										// Check for both musicShelfRenderer and itemSectionRenderer
+										musicShelf, hasMusicShelf := sectionMap["musicShelfRenderer"]
+										if !hasMusicShelf {
+											api.LogDebug("Section %d has no musicShelfRenderer, checking for itemSectionRenderer", i)
+											_, hasItemSection := sectionMap["itemSectionRenderer"]
+											if !hasItemSection {
+												api.LogDebug("Section %d has no itemSectionRenderer either, skipping", i)
+												continue
+											}
+											
+											// Process itemSectionRenderer if needed
+											api.LogDebug("Found itemSectionRenderer in section %d, skipping as it typically contains messages", i)
+											continue
+										}
+										
+										musicShelfMap, isMusicShelfMap := musicShelf.(map[string]interface{})
+										if !isMusicShelfMap {
+											api.LogDebug("MusicShelf in section %d is not a map, skipping", i)
+											continue
+										}
+										
+										// Check for title to identify the section (Songs, Albums, etc.)
+										if title, hasTitle := musicShelfMap["title"].(map[string]interface{}); hasTitle {
+											if runs, hasRuns := title["runs"].([]interface{}); hasRuns && len(runs) > 0 {
+												if firstRun, isMap := runs[0].(map[string]interface{}); isMap {
+													if text, hasText := firstRun["text"].(string); hasText {
+														api.LogDebug("Section %d title: %s", i, text)
+													}
 												}
 											}
 										}
-									}
-								}
-							}
-						}
-						
-						// Artist is usually in the second flex column
-						if len(flexColumns) > 1 {
-							secondColumn, isMap := flexColumns[1].(map[string]interface{})
-							if isMap {
-								columnRenderer, hasColumnRenderer := secondColumn["musicResponsiveListItemFlexColumnRenderer"]
-								if hasColumnRenderer {
-									columnRendererMap, isColumnRendererMap := columnRenderer.(map[string]interface{})
-									if isColumnRendererMap {
-										textObj, hasText := columnRendererMap["text"].(map[string]interface{})
-										if hasText {
-											runs, hasRuns := textObj["runs"].([]interface{})
-											if hasRuns && len(runs) > 0 {
-												firstRun, isRunMap := runs[0].(map[string]interface{})
-												if isRunMap {
-													artistText, hasText := firstRun["text"].(string)
-													if hasText {
-														artist = artistText
+										
+										contentItems, hasContents := musicShelfMap["contents"].([]interface{})
+										if !hasContents {
+											api.LogDebug("Section %d has no contents, skipping", i)
+											continue
+										}
+										
+										api.LogDebug("Found music shelf with %d items in section %d", len(contentItems), i)
+										
+										// Process each track item
+										for j, item := range contentItems {
+											itemMap, isItemMap := item.(map[string]interface{})
+											if !isItemMap {
+												api.LogDebug("Item %d in section %d is not a map, skipping", j, i)
+												continue
+											}
+											
+											renderer, hasRenderer := itemMap["musicResponsiveListItemRenderer"]
+											if !hasRenderer {
+												api.LogDebug("Item %d in section %d has no musicResponsiveListItemRenderer, skipping", j, i)
+												continue
+											}
+											
+											rendererMap, isRendererMap := renderer.(map[string]interface{})
+											if !isRendererMap {
+												api.LogDebug("Renderer for item %d in section %d is not a map, skipping", j, i)
+												continue
+											}
+											
+											// Extract track ID directly from playlistItemData if available
+											var trackID, title, artist string
+											
+											// Method 1: Get ID from playlistItemData
+											if playlistItemData, hasPlaylistData := rendererMap["playlistItemData"].(map[string]interface{}); hasPlaylistData {
+												if videoId, hasVideoId := playlistItemData["videoId"].(string); hasVideoId {
+													trackID = videoId
+													api.LogDebug("Found track ID from playlistItemData: %s", trackID)
+												}
+											}
+											
+											// Method 2: Get ID from overlay if not found yet
+											if trackID == "" {
+												if extractedID, err := api.extractTrackIDFromOverlay(rendererMap); err == nil && extractedID != "" {
+													trackID = extractedID
+													api.LogDebug("Found track ID from overlay: %s", trackID)
+												}
+											}
+											
+											// Method 3: Get ID from menu if still not found
+											if trackID == "" {
+												if extractedID, err := api.extractTrackIDFromMenu(rendererMap); err == nil && extractedID != "" {
+													trackID = extractedID
+													api.LogDebug("Found track ID from menu: %s", trackID)
+												}
+											}
+											
+											// Extract flex columns for title and artist
+											flexColumns, hasFlexColumns := rendererMap["flexColumns"].([]interface{})
+											if !hasFlexColumns || len(flexColumns) < 2 {
+												api.LogDebug("Item %d in section %d has no valid flexColumns, skipping", j, i)
+												continue
+											}
+											
+											// Title is usually in the first flex column
+											firstColumn, isMap := flexColumns[0].(map[string]interface{})
+											if isMap {
+												columnRenderer, hasColumnRenderer := firstColumn["musicResponsiveListItemFlexColumnRenderer"]
+												if hasColumnRenderer {
+													columnRendererMap, isColumnRendererMap := columnRenderer.(map[string]interface{})
+													if isColumnRendererMap {
+														textObj, hasText := columnRendererMap["text"].(map[string]interface{})
+														if hasText {
+															runs, hasRuns := textObj["runs"].([]interface{})
+															if hasRuns && len(runs) > 0 {
+																firstRun, isRunMap := runs[0].(map[string]interface{})
+																if isRunMap {
+																	titleText, hasText := firstRun["text"].(string)
+																	if hasText {
+																		title = titleText
+																		api.LogDebug("Found title: %s", title)
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+											
+											// Artist is usually in the second flex column
+											if len(flexColumns) > 1 {
+												secondColumn, isMap := flexColumns[1].(map[string]interface{})
+												if isMap {
+													columnRenderer, hasColumnRenderer := secondColumn["musicResponsiveListItemFlexColumnRenderer"]
+													if hasColumnRenderer {
+														columnRendererMap, isColumnRendererMap := columnRenderer.(map[string]interface{})
+														if isColumnRendererMap {
+															textObj, hasText := columnRendererMap["text"].(map[string]interface{})
+															if hasText {
+																runs, hasRuns := textObj["runs"].([]interface{})
+																if hasRuns && len(runs) > 0 {
+																	firstRun, isRunMap := runs[0].(map[string]interface{})
+																	if isRunMap {
+																		artistText, hasText := firstRun["text"].(string)
+																		if hasText {
+																			artist = artistText
+																			api.LogDebug("Found artist: %s", artist)
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+											
+											// Only add tracks with ID and title
+											if trackID != "" && title != "" {
+												// Try to extract duration from third flex column or use default
+												duration := 180 // Default duration in seconds
+												
+												if len(flexColumns) > 2 {
+													thirdColumn, isMap := flexColumns[2].(map[string]interface{})
+													if isMap {
+														// Just check if it exists, but don't assign to unused variable
+														if _, hasColumnRenderer := thirdColumn["musicResponsiveListItemFlexColumnRenderer"]; hasColumnRenderer {
+															// Extract plays or duration if available
+															// This is a simplified approach
+														}
+													}
+												}
+												
+												track := Track{
+													ID:       trackID,
+													Title:    title,
+													Artist:   artist,
+													Duration: duration,
+												}
+												tracks = append(tracks, track)
+												api.LogDebug("Added track: %s - %s (ID: %s)", title, artist, trackID)
+											} else {
+												api.LogDebug("Skipping track due to missing ID or title. ID: %s, Title: %s", trackID, title)
+											}
+										}
+										
+										// If we found tracks in this section, we can stop looking
+										// Only if the section is for "Songs"
+										if len(tracks) > 0 {
+											if title, hasTitle := musicShelfMap["title"].(map[string]interface{}); hasTitle {
+												if runs, hasRuns := title["runs"].([]interface{}); hasRuns && len(runs) > 0 {
+													if firstRun, isMap := runs[0].(map[string]interface{}); isMap {
+														if text, hasText := firstRun["text"].(string); hasText && text == "Songs" {
+															api.LogDebug("Found %d tracks in 'Songs' section, stopping search", len(tracks))
+															break
+														}
 													}
 												}
 											}
@@ -207,50 +334,6 @@ func (api *YouTubeMusicAPI) Search(query string) ([]Track, error) {
 								}
 							}
 						}
-						
-						// Try to extract video ID from various possible locations
-						// Method 1: playlistItemData
-						playlistItemData, hasPlaylistData := rendererMap["playlistItemData"]
-						if hasPlaylistData {
-							playlistMap, isPlaylistMap := playlistItemData.(map[string]interface{})
-							if isPlaylistMap {
-								videoId, hasVideoId := playlistMap["videoId"].(string)
-								if hasVideoId {
-									trackID = videoId
-								}
-							}
-						}
-						
-						// Method 2: overlay
-						if trackID == "" {
-							if trackID, err = api.extractTrackIDFromOverlay(rendererMap); err == nil && trackID != "" {
-								// Track ID found
-							}
-						}
-						
-						// Method 3: navigationEndpoint
-						if trackID == "" {
-							if trackID, err = api.extractTrackIDFromMenu(rendererMap); err == nil && trackID != "" {
-								// Track ID found
-							}
-						}
-						
-						// Only add tracks with ID and title
-						if trackID != "" && title != "" {
-							track := Track{
-								ID:       trackID,
-								Title:    title,
-								Artist:   artist,
-								Duration: 180, // Default duration since it's hard to extract
-							}
-							tracks = append(tracks, track)
-							api.LogDebug("Added track: %s - %s (ID: %s)", title, artist, trackID)
-						}
-					}
-					
-					// If we found tracks in this section, we can stop looking
-					if len(tracks) > 0 {
-						break
 					}
 				}
 			}
