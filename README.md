@@ -88,36 +88,95 @@ pip3 install ytmusicapi
 
 ## 🔐 Authentication Setup
 
-**Important**: You need to authenticate with YouTube Music to access your playlists and use the full functionality.
+**Important**: You need to authenticate with YouTube Music to access your playlists and use the full functionality. We recommend OAuth authentication for the most stable experience.
 
-### Method 1: Browser Authentication (Recommended)
+### Method 1: OAuth Authentication (Recommended)
+
+OAuth provides the most stable and long-lasting authentication. It requires a one-time Google API setup.
+
+#### Step 1: Create Google Cloud Project
+
+1. **Go to [Google Cloud Console](https://console.cloud.google.com/)**
+2. **Create a new project**:
+   - Click "Select a project" → "New Project"
+   - Name: `YouTube Music TUI` (or any name you prefer)
+   - Click "Create"
+3. **Select your project** from the dropdown
+
+#### Step 2: Enable YouTube Data API
+
+1. **Go to [API Library](https://console.cloud.google.com/apis/library)**
+2. **Search for "YouTube Data API v3"**
+3. **Click on it and press "Enable"**
+
+#### Step 3: Create OAuth Credentials
+
+1. **Go to [Credentials page](https://console.cloud.google.com/apis/credentials)**
+2. **Click "Create Credentials" → "OAuth 2.0 Client IDs"**
+3. **If prompted to configure OAuth consent screen**:
+   - Choose "External" (unless you have a Google Workspace account)
+   - Fill in required fields:
+     - **App name**: `YouTube Music TUI`
+     - **User support email**: Your email
+     - **Developer contact information**: Your email
+   - Save and continue through the steps
+   - Add yourself as a test user in "Test users" section
+4. **Create OAuth Client ID**:
+   - **Application type**: Desktop application
+   - **Name**: `YouTube Music TUI`
+   - Click "Create"
+5. **Download the JSON file**:
+   - Click the download button next to your client ID
+   - Save it as `client_secret.json` somewhere safe
+
+#### Step 4: Set Up ytmusicapi OAuth
+
+```bash
+# Set environment variable to your downloaded file
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/client_secret.json"
+
+# Or copy it to a standard location
+cp /path/to/your/client_secret.json ~/.ytmusic/client_secret.json
+export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.ytmusic/client_secret.json"
+
+# Create OAuth authentication
+ytmusicapi oauth --file ~/.ytmusic/oauth_auth.json
+```
+
+**Follow the prompts:**
+1. A browser window will open
+2. Sign in to your Google/YouTube Music account
+3. Grant permission to the application
+4. Copy the authorization code back to the terminal
+
+#### Step 5: Verify OAuth Setup
+
+```bash
+# Test that OAuth authentication works
+python3 scripts/ytmusic_bridge.py playlists --limit 5 --debug
+```
+
+If successful, you should see your playlists listed.
+
+### Method 2: Browser Authentication (Alternative)
+
+If OAuth setup is too complex, you can use browser authentication, though it may expire more frequently.
+
 ```bash
 # Set up authentication using browser method
 ytmusicapi browser --file ~/.ytmusic/headers_auth.json
 ```
 
-### Method 2: OAuth Authentication
-```bash
-# Alternative method using OAuth (requires Google API credentials)
-ytmusicapi oauth --file ~/.ytmusic/headers_auth.json
-```
+#### Authentication Steps (Browser Method)
 
-**Note**: The OAuth method requires setting up Google API credentials and is more complex. The browser method is recommended for most users.
-
-### Authentication Steps (Browser Method)
-
-This method emulates your browser session by reusing its request headers. Follow these instructions to have your browser's YouTube Music session request headers parsed to a ytmusicapi configuration file.
-
-#### Copy Authentication Headers
-
-To run authenticated requests, set it up by first copying your request headers from an authenticated POST request in your browser:
+This method emulates your browser session by reusing its request headers.
 
 1. **Open a new tab**
 2. **Open the developer tools** (Ctrl-Shift-I) and select the **"Network"** tab
 3. **Go to https://music.youtube.com** and ensure you are logged in
 4. **Find an authenticated POST request**: The simplest way is to filter by `/browse` using the search bar of the developer tools. If you don't see the request, try scrolling down a bit or clicking on the library button in the top bar.
 
-#### Firefox (Recommended)
+##### Firefox (Recommended)
 1. Verify that the request looks like this:
    - **Status**: 200
    - **Method**: POST  
@@ -125,7 +184,7 @@ To run authenticated requests, set it up by first copying your request headers f
    - **File**: `browse?...`
 2. **Copy the request headers**: Right click → Copy → Copy Request Headers
 
-#### Chromium (Chrome/Edge)
+##### Chromium (Chrome/Edge)
 1. Verify that the request looks like this:
    - **Status**: 200
    - **Name**: `browse?...`
@@ -133,7 +192,7 @@ To run authenticated requests, set it up by first copying your request headers f
 3. In the **"Headers"** tab, scroll to the section **"Request headers"**
 4. **Copy everything** starting from `"accept: */*"` to the end of the section
 
-#### Complete the Setup
+##### Complete the Setup
 5. **Run the ytmusicapi setup command**:
    ```bash
    ytmusicapi browser --file ~/.ytmusic/headers_auth.json
@@ -145,6 +204,30 @@ To run authenticated requests, set it up by first copying your request headers f
 ```bash
 # Test that authentication works
 python3 scripts/ytmusic_bridge.py playlists --limit 5 --debug
+```
+
+### Troubleshooting Authentication
+
+#### OAuth Issues
+- **"Access blocked"**: Make sure you added yourself as a test user in the OAuth consent screen
+- **"Client secret not found"**: Check the `GOOGLE_APPLICATION_CREDENTIALS` environment variable
+- **"Invalid client"**: Ensure you downloaded the correct JSON file from Google Cloud Console
+
+#### Browser Issues  
+- **Authentication expires quickly**: Try OAuth method instead
+- **No playlists found**: You might not have any playlists, or authentication failed
+- **Headers capture fails**: Make sure you're copying from music.youtube.com, not google.com
+
+#### General Issues
+```bash
+# Check if ytmusicapi is installed
+python3 -c "import ytmusicapi; print('OK')"
+
+# Check authentication files
+ls -la ~/.ytmusic/
+
+# Test without authentication
+python3 scripts/ytmusic_bridge.py search --query "test" --limit 3
 ```
 
 If successful, you should see your playlists listed.
@@ -311,9 +394,11 @@ If you encounter issues:
 ## ⚠️ Important Notes
 
 - **Rate Limiting**: YouTube Music has rate limits. Avoid making too many requests in a short time.
-- **Authentication**: Your authentication tokens are stored locally in `~/.ytmusic/headers_auth.json`. Keep this file secure.
-- **Cookies**: The old cookie-based authentication is no longer needed. The app now uses proper ytmusicapi authentication.
+- **Authentication**: OAuth tokens are more stable than browser headers and rarely expire.
+- **Google API Limits**: The free tier includes 10,000 YouTube API requests per day, which is plenty for personal use.
+- **Browser Headers**: If using browser authentication, you may need to re-authenticate periodically if sessions expire.
 - **Network**: You need an active internet connection to search and stream music.
+- **Privacy**: Your authentication tokens are stored locally in `~/.ytmusic/` directory. Keep these files secure.
 
 ## 📄 License
 
