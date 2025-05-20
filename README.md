@@ -101,9 +101,11 @@ pip3 install ytmusicapi
 
 **Important**: You need to authenticate with YouTube Music to access your playlists and use the full functionality. We recommend OAuth authentication for the most stable experience.
 
+**⚠️ CRITICAL (November 2024 Update)**: OAuth authentication now requires **both** an OAuth JSON file AND client credentials. You must use "TVs and Limited Input devices" as the application type.
+
 ### Method 1: OAuth Authentication (Recommended)
 
-OAuth provides the most stable and long-lasting authentication. It requires a one-time Google API setup.
+OAuth provides the most stable and long-lasting authentication. As of November 2024, it requires both OAuth tokens and client credentials.
 
 #### Step 1: Create Google Cloud Project
 
@@ -120,7 +122,7 @@ OAuth provides the most stable and long-lasting authentication. It requires a on
 2. **Search for "YouTube Data API v3"**
 3. **Click on it and press "Enable"**
 
-#### Step 3: Create OAuth Credentials
+#### Step 3: Create OAuth Credentials ⚠️ **IMPORTANT: Choose TV Device Type**
 
 1. **Go to [Credentials page](https://console.cloud.google.com/apis/credentials)**
 2. **Click "Create Credentials" → "OAuth 2.0 Client IDs"**
@@ -133,24 +135,27 @@ OAuth provides the most stable and long-lasting authentication. It requires a on
    - Save and continue through the steps
    - Add yourself as a test user in "Test users" section
 4. **Create OAuth Client ID**:
-   - **Application type**: Desktop application
+   - **Application type**: ⚠️ **"TVs and Limited Input devices"** (NOT Desktop application!)
    - **Name**: `YouTube Music TUI`
    - Click "Create"
 5. **Download the JSON file**:
    - Click the download button next to your client ID
-   - Save it as `client_secret.json` somewhere safe
+   - Save it as `client_secret.json`
 
-#### Step 4: Set Up ytmusicapi OAuth
+#### Step 4: Set Up Client Credentials
 
 ```bash
-# Set environment variable to your downloaded file
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/client_secret.json"
+# Create the ytmusic config directory
+mkdir -p ~/.ytmusic
 
-# Or copy it to a standard location
-cp /path/to/your/client_secret.json ~/.ytmusic/client_secret.json
-export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.ytmusic/client_secret.json"
+# Copy your downloaded client credentials
+cp /path/to/your/downloaded_client_secret.json ~/.ytmusic/client_secret.json
+```
 
-# Create OAuth authentication
+#### Step 5: Set Up OAuth Authentication
+
+```bash
+# Create OAuth authentication (this creates oauth_auth.json)
 ytmusicapi oauth --file ~/.ytmusic/oauth_auth.json
 ```
 
@@ -160,7 +165,17 @@ ytmusicapi oauth --file ~/.ytmusic/oauth_auth.json
 3. Grant permission to the application
 4. Copy the authorization code back to the terminal
 
-#### Step 5: Verify OAuth Setup
+#### Step 6: Verify You Have Both Files
+
+You should now have **BOTH** files:
+```bash
+ls -la ~/.ytmusic/
+# Should show:
+# oauth_auth.json      (OAuth tokens - created by ytmusicapi oauth command)
+# client_secret.json   (Client credentials - downloaded from Google Cloud Console)
+```
+
+#### Step 7: Verify OAuth Setup
 
 ```bash
 # Test that OAuth authentication works
@@ -221,8 +236,9 @@ python3 scripts/ytmusic_bridge.py playlists --limit 5 --debug
 
 #### OAuth Issues
 - **"Access blocked"**: Make sure you added yourself as a test user in the OAuth consent screen
-- **"Client secret not found"**: Check the `GOOGLE_APPLICATION_CREDENTIALS` environment variable
-- **"Invalid client"**: Ensure you downloaded the correct JSON file from Google Cloud Console
+- **"Client secret not found"**: Check that `~/.ytmusic/client_secret.json` exists and contains your credentials
+- **"Invalid client"**: Ensure you downloaded the correct JSON file from Google Cloud Console and chose "TVs and Limited Input devices"
+- **"'NoneType' object is not subscriptable"**: This usually means missing client credentials or insufficient permissions
 
 #### Browser Issues  
 - **Authentication expires quickly**: Try OAuth method instead
@@ -353,11 +369,14 @@ sudo pip3 install ytmusicapi
 
 #### Authentication Issues
 ```bash
-# Re-run authentication setup
+# For OAuth: Re-run authentication setup with proper credentials
+ytmusicapi oauth --file ~/.ytmusic/oauth_auth.json
+
+# For Browser: Re-run authentication setup
 ytmusicapi browser ~/.ytmusic/headers_auth.json
 
-# Check if auth file exists
-ls -la ~/.ytmusic/headers_auth.json
+# Check if auth files exist
+ls -la ~/.ytmusic/
 
 # Test authentication
 python3 scripts/ytmusic_bridge.py playlists --debug
@@ -378,6 +397,7 @@ mpv --version
 - Make sure you're logged into the correct YouTube Music account
 - Try refreshing your browser authentication
 - Some accounts may not have any created playlists
+- Check that you have both `oauth_auth.json` AND `client_secret.json` for OAuth
 
 ### Debug Mode
 
@@ -410,6 +430,7 @@ If you encounter issues:
 - **Browser Headers**: If using browser authentication, you may need to re-authenticate periodically if sessions expire.
 - **Network**: You need an active internet connection to search and stream music.
 - **Privacy**: Your authentication tokens are stored locally in `~/.ytmusic/` directory. Keep these files secure.
+- **OAuth Requirements**: As of November 2024, OAuth requires both oauth_auth.json AND client_secret.json files, with "TVs and Limited Input devices" as the application type.
 
 ## 📄 License
 

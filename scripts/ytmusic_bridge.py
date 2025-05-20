@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YouTube Music API Bridge Script - Fixed Import Issues
+YouTube Music API Bridge Script - Fixed OAuth Issues
 Command-line interface for the Go application to interact with ytmusicapi
 """
 
@@ -18,10 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Try multiple ways to import ytmusicapi
 ytmusicapi_available = False
 YTMusic = None
+OAuthCredentials = None
 
 # Method 1: Direct import
 try:
-    from ytmusicapi import YTMusic
+    from ytmusicapi import YTMusic, OAuthCredentials
     ytmusicapi_available = True
     logging.info("ytmusicapi imported successfully (direct)")
 except ImportError as e:
@@ -35,7 +36,7 @@ if not ytmusicapi_available:
         if user_site not in sys.path:
             sys.path.insert(0, user_site)
         
-        from ytmusicapi import YTMusic
+        from ytmusicapi import YTMusic, OAuthCredentials
         ytmusicapi_available = True
         logging.info("ytmusicapi imported successfully (user site-packages)")
     except ImportError as e:
@@ -57,7 +58,7 @@ if not ytmusicapi_available:
             
             if location and location not in sys.path:
                 sys.path.insert(0, location)
-                from ytmusicapi import YTMusic
+                from ytmusicapi import YTMusic, OAuthCredentials
                 ytmusicapi_available = True
                 logging.info(f"ytmusicapi imported successfully (found at {location})")
     except Exception as e:
@@ -92,9 +93,9 @@ class YouTubeMusicBridge:
             except Exception as e:
                 logging.error(f"Cookie authentication failed: {e}")
         
-        # Try to authenticate with existing headers file
+        # Try to authenticate with existing OAuth/headers files
         if not self.authenticated:
-            self._authenticate_with_headers()
+            self._authenticate_with_oauth_or_headers()
         
         # Fall back to no authentication
         if not self.authenticated:
@@ -106,22 +107,55 @@ class YouTubeMusicBridge:
     
     def _authenticate_with_cookie(self, cookie: str):
         """Try to authenticate with a cookie (this is a simplified approach)"""
-        # For now, we'll skip cookie auth since ytmusicapi prefers headers
+        # For now, we'll skip cookie auth since ytmusicapi prefers headers/oauth
         # In a real implementation, you'd convert the cookie to headers format
         pass
     
-    def _authenticate_with_headers(self):
-        """Try to authenticate with headers file"""
-        # Try OAuth first (more stable)
+    def _authenticate_with_oauth_or_headers(self):
+        """Try to authenticate with OAuth or headers file"""
+        # Try OAuth first (more stable) - with client credentials support
         oauth_path = os.path.expanduser("~/.ytmusic/oauth_auth.json")
+        client_secret_path = os.path.expanduser("~/.ytmusic/client_secret.json")
+        
         if os.path.exists(oauth_path):
             try:
-                self.ytmusic = YTMusic(oauth_path)
-                self.authenticated = True
-                logging.info(f"Authenticated using OAuth: {oauth_path}")
-                return
+                # Check if we have client credentials file
+                client_id = None
+                client_secret = None
+                
+                if os.path.exists(client_secret_path):
+                    with open(client_secret_path, 'r') as f:
+                        credentials = json.load(f)
+                        # Handle both direct credentials and Google Cloud Console format
+                        if 'installed' in credentials:
+                            client_id = credentials['installed']['client_id']
+                            client_secret = credentials['installed']['client_secret']
+                        elif 'client_id' in credentials:
+                            client_id = credentials['client_id']
+                            client_secret = credentials['client_secret']
+                
+                # Try OAuth with client credentials (new requirement)
+                if client_id and client_secret:
+                    oauth_credentials = OAuthCredentials(
+                        client_id=client_id,
+                        client_secret=client_secret
+                    )
+                    self.ytmusic = YTMusic(oauth_path, oauth_credentials=oauth_credentials)
+                    self.authenticated = True
+                    logging.info(f"Authenticated using OAuth with client credentials: {oauth_path}")
+                    return
+                else:
+                    # Try OAuth without client credentials (legacy)
+                    logging.warning("No client credentials found, trying OAuth without them")
+                    self.ytmusic = YTMusic(oauth_path)
+                    self.authenticated = True
+                    logging.info(f"Authenticated using OAuth (legacy): {oauth_path}")
+                    return
+                    
             except Exception as e:
                 logging.error(f"OAuth authentication failed: {e}")
+                logging.error("This might be due to missing client credentials (required as of Nov 2024)")
+                logging.error("Please set up OAuth with TV device credentials")
         
         # Fall back to browser headers
         headers_path = os.path.expanduser("~/.ytmusic/headers_auth.json")
@@ -165,7 +199,25 @@ class YouTubeMusicBridge:
                 return []
             
             logging.info("Fetching library playlists...")
-            playlists = self.ytmusic.get_library_playlists(limit=limit)
+            
+            # Add more detailed error handling for the specific issue
+            try:
+                playlists = self.ytmusic.get_library_playlists(limit=limit)
+            except TypeError as e:
+                if "'NoneType' object is not subscriptable" in str(e):
+                    logging.error("get_library_playlists returned None - this might be due to:")
+                    logging.error("1. Missing OAuth client credentials (required as of Nov 2024)")
+                    logging.error("2. Insufficient permissions")
+                    logging.error("3. Account has no playlists")
+                    logging.error("4. YouTube Music API temporary issue")
+                    return []
+                else:
+                    raise
+            
+            # Handle None response
+            if playlists is None:
+                logging.warning("get_library_playlists returned None - you might not have any playlists")
+                return []
             
             # Debug: Check what we actually got
             logging.info(f"Raw playlists type: {type(playlists)}")
