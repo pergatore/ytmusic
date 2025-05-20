@@ -14,6 +14,15 @@ import (
 	"ytmusic/internal/player"
 )
 
+// ViewMode defines the different view modes for the application
+type ViewMode int
+
+const (
+	ViewSearch ViewMode = iota
+	ViewTracks
+	ViewPlaylists
+)
+
 // Styling
 var (
 	appStyle = lipgloss.NewStyle().
@@ -50,26 +59,34 @@ var (
 	resultInfoStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#AAAAAA")).
 		Italic(true)
+		
+	modeStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#00AAFF")).
+		Bold(true)
 )
 
 // Model is the main application model
 type Model struct {
-	Api          *api.YouTubeMusicAPI
-	Player       *player.Player
-	List         list.Model
-	SearchInput  textinput.Model
-	Progress     progress.Model
-	Spinner      spinner.Model
-	CurrentTrack api.Track
-	Width        int
-	Height       int
-	SearchMode   bool
-	LoginMode    bool
-	ResetMode    bool
-	IsLoading    bool
-	ErrorMsg     string
-	DebugMode    bool
-	SearchResults int  // New field to track number of search results
+	Api           *api.YouTubeMusicAPI
+	Player        *player.Player
+	TrackList     list.Model
+	PlaylistList  list.Model
+	SearchInput   textinput.Model
+	Progress      progress.Model
+	Spinner       spinner.Model
+	CurrentTrack  api.Track
+	Width         int
+	Height        int
+	SearchMode    bool
+	LoginMode     bool
+	ResetMode     bool
+	IsLoading     bool
+	ErrorMsg      string
+	DebugMode     bool
+	SearchResults int           // Number of search results
+	Playlists     []api.Playlist // User playlists
+	ViewMode      ViewMode       // Current view mode
+	ActiveList    *list.Model    // Pointer to the currently active list
 }
 
 // InitialModel creates the initial application model
@@ -78,32 +95,44 @@ func InitialModel(debugMode bool) *Model {
 	ytApi := api.NewYouTubeMusicAPI(debugMode)
 	
 	// Initialize list with custom delegate for better track display
-	delegate := list.NewDefaultDelegate()
+	trackDelegate := list.NewDefaultDelegate()
 	
 	// Customize the delegate styles for better visual appearance
-	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.
+	trackDelegate.Styles.NormalTitle = trackDelegate.Styles.NormalTitle.
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true)
 		
-	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.
+	trackDelegate.Styles.NormalDesc = trackDelegate.Styles.NormalDesc.
 		Foreground(lipgloss.Color("#AAAAAA"))
 	
-	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
+	trackDelegate.Styles.SelectedTitle = trackDelegate.Styles.SelectedTitle.
 		Foreground(lipgloss.Color("#000000")).
 		Background(lipgloss.Color("#ff0000")).
 		Bold(true)
 	
-	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
+	trackDelegate.Styles.SelectedDesc = trackDelegate.Styles.SelectedDesc.
 		Foreground(lipgloss.Color("#000000")).
 		Background(lipgloss.Color("#ff0000"))
 	
-	l := list.New([]list.Item{}, delegate, 0, 0)
-	l.Title = "YouTube Music"
-	l.SetShowTitle(true)
-	l.SetShowHelp(false)
-	l.SetShowStatusBar(true)  // Enable the status bar to show the index
-	l.SetFilteringEnabled(false)
-	l.Styles.Title = titleStyle
+	trackList := list.New([]list.Item{}, trackDelegate, 0, 0)
+	trackList.Title = "YouTube Music - Tracks"
+	trackList.SetShowTitle(true)
+	trackList.SetShowHelp(false)
+	trackList.SetShowStatusBar(true)
+	trackList.SetFilteringEnabled(false)
+	trackList.Styles.Title = titleStyle
+	
+	// Initialize playlist list with another delegate
+	playlistDelegate := list.NewDefaultDelegate()
+	playlistDelegate.Styles = trackDelegate.Styles // Reuse the same styling
+	
+	playlistList := list.New([]list.Item{}, playlistDelegate, 0, 0)
+	playlistList.Title = "YouTube Music - Playlists"
+	playlistList.SetShowTitle(true)
+	playlistList.SetShowHelp(false)
+	playlistList.SetShowStatusBar(true)
+	playlistList.SetFilteringEnabled(false)
+	playlistList.Styles.Title = titleStyle
 	
 	// Search input
 	ti := textinput.New()
@@ -118,20 +147,40 @@ func InitialModel(debugMode bool) *Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	
-	return &Model{
-		Api:          ytApi,
-		Player:       player.NewPlayer(debugMode),
-		List:         l,
-		SearchInput:  ti,
-		Progress:     p,
-		Spinner:      s,
-		SearchMode:   false,
-		LoginMode:    !ytApi.IsLoggedIn,
-		ResetMode:    false,
-		IsLoading:    false,
-		DebugMode:    debugMode,
+	// Player with debug mode
+	musicPlayer := player.NewPlayer(debugMode)
+	
+	m := &Model{
+		Api:           ytApi,
+		Player:        musicPlayer,
+		TrackList:     trackList,
+		PlaylistList:  playlistList,
+		SearchInput:   ti,
+		Progress:      p,
+		Spinner:       s,
+		SearchMode:    false,
+		LoginMode:     !ytApi.IsLoggedIn,
+		ResetMode:     false,
+		IsLoading:     false,
+		DebugMode:     debugMode,
 		SearchResults: 0,
+		ViewMode:      ViewTracks,
 	}
+	
+	// Set the active list to tracks by default
+	m.ActiveList = &m.TrackList
+	
+	// Set up the next track callback
+	m.Player.SetNextCallback(func() {
+		// We need to send a message to the Bubble Tea program
+		// This is done via a channel or using the Send method on the Program
+		// For simplicity, we'll just automatically try to play the next track
+		if err := m.Player.PlayNext(); err != nil {
+			m.ErrorMsg = "Error playing next track: " + err.Error()
+		}
+	})
+	
+	return m
 }
 
 // Init initializes the model
@@ -148,6 +197,16 @@ type loginStatusMsg struct {
 }
 
 type searchResultMsg struct {
+	tracks []api.Track
+	err    error
+}
+
+type playlistsResultMsg struct {
+	playlists []api.Playlist
+	err       error
+}
+
+type playlistTracksResultMsg struct {
 	tracks []api.Track
 	err    error
 }
@@ -179,6 +238,22 @@ func SearchCmd(api *api.YouTubeMusicAPI, query string) tea.Cmd {
 	}
 }
 
+// GetPlaylistsCmd fetches the user's playlists
+func GetPlaylistsCmd(api *api.YouTubeMusicAPI) tea.Cmd {
+	return func() tea.Msg {
+		playlists, err := api.GetUserPlaylists()
+		return playlistsResultMsg{playlists: playlists, err: err}
+	}
+}
+
+// GetPlaylistTracksCmd fetches tracks from a playlist
+func GetPlaylistTracksCmd(api *api.YouTubeMusicAPI, playlistID string) tea.Cmd {
+	return func() tea.Msg {
+		tracks, err := api.GetPlaylistTracks(playlistID)
+		return playlistTracksResultMsg{tracks: tracks, err: err}
+	}
+}
+
 // GetStreamURLCmd gets a stream URL for a track
 func GetStreamURLCmd(api *api.YouTubeMusicAPI, trackID string) tea.Cmd {
 	return func() tea.Msg {
@@ -204,3 +279,4 @@ func ProgressTickCmd() tea.Cmd {
 		return progressMsg{}
 	})
 }
+

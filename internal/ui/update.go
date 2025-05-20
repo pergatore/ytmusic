@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"fmt"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	
 	"ytmusic/internal/api"
+	"ytmusic/internal/player"
 )
 
 // Update updates the model based on messages
@@ -19,6 +21,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.LoginMode {
 			return m, nil
 		}
+		
+		// If we've just logged in, fetch playlists
+		if msg.isLoggedIn {
+			m.IsLoading = true
+			return m, tea.Batch(
+				m.Spinner.Tick,
+				GetPlaylistsCmd(m.Api),
+			)
+		}
+		
 		return m, nil
 		
 	case tea.KeyMsg:
@@ -80,6 +92,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.ErrorMsg = "Please enter a search term"
 					return m, nil
 				}
+				
+				// Switch to tracks view when searching
+				m.ViewMode = ViewTracks
+				m.ActiveList = &m.TrackList
+				
 				return m, tea.Batch(
 					m.Spinner.Tick,
 					SearchCmd(m.Api, query),
@@ -98,6 +115,63 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			
 			case "r":
+				// Toggle repeat mode
+				mode := m.Player.CycleRepeatMode()
+				modeNames := map[player.PlaybackMode]string{
+					player.RepeatNone: "Repeat: Off",
+					player.RepeatOne:  "Repeat: One",
+					player.RepeatAll:  "Repeat: All",
+				}
+				m.ErrorMsg = modeNames[mode] // Use error message area to show mode change
+				return m, nil
+				
+			case "s":
+				// Toggle shuffle mode
+				m.Player.ToggleShuffle()
+				if m.Player.Queue.ShuffleMode {
+					m.ErrorMsg = "Shuffle: On"
+				} else {
+					m.ErrorMsg = "Shuffle: Off"
+				}
+				return m, nil
+				
+			case "n":
+				// Play next track
+				m.ErrorMsg = "" // Clear previous errors
+				if err := m.Player.PlayNext(); err != nil {
+					m.ErrorMsg = "Error playing next track: " + err.Error()
+				}
+				return m, ProgressTickCmd()
+				
+			case "b":
+				// Play previous track
+				m.ErrorMsg = "" // Clear previous errors
+				if err := m.Player.PlayPrevious(); err != nil {
+					m.ErrorMsg = "Error playing previous track: " + err.Error()
+				}
+				return m, ProgressTickCmd()
+				
+			case "p":
+				// Toggle between tracks and playlists views
+				if m.ViewMode == ViewTracks {
+					m.ViewMode = ViewPlaylists
+					m.ActiveList = &m.PlaylistList
+					
+					// If we haven't loaded playlists yet, load them now
+					if len(m.Playlists) == 0 {
+						m.IsLoading = true
+						return m, tea.Batch(
+							m.Spinner.Tick,
+							GetPlaylistsCmd(m.Api),
+						)
+					}
+				} else {
+					m.ViewMode = ViewTracks
+					m.ActiveList = &m.TrackList
+				}
+				return m, nil
+				
+			case "R":
 				// Enter reset mode to confirm cookie reset
 				m.ResetMode = true
 				return m, nil
@@ -108,7 +182,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			
 			case " ":
-				if m.Player.IsPlaying || (!m.Player.IsPlaying && m.CurrentTrack.ID != "") {
+				if m.Player.IsPlaying || (!m.Player.IsPlaying && m.Player.Queue.GetCurrentTrack() != nil) {
 					m.Player.TogglePause()
 					if m.Player.IsPlaying {
 						return m, ProgressTickCmd()
@@ -117,25 +191,57 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			
 			case "enter":
-				if len(m.List.Items()) > 0 {
-					selectedItem, ok := m.List.SelectedItem().(api.Track)
+				if m.ActiveList.Items() == nil || len(m.ActiveList.Items()) == 0 {
+					return m, nil
+				}
+				
+				m.ErrorMsg = "" // Clear previous errors
+				
+				if m.ViewMode == ViewTracks {
+					// Handle track selection
+					selectedItem, ok := m.ActiveList.SelectedItem().(api.Track)
 					if !ok {
 						return m, nil
 					}
 					
-					// Check if we've played this track before and have its real duration
-					if m.CurrentTrack.ID == selectedItem.ID && m.Player.Duration > 0 {
-						// Update the duration of the selected track with the known duration
-						selectedItem.Duration = m.Player.Duration
+					// Update the queue with the selected track and all following tracks
+					// First, get all tracks from the current list
+					allTracks := make([]api.Track, len(m.TrackList.Items()))
+					for i, item := range m.TrackList.Items() {
+						if track, ok := item.(api.Track); ok {
+							allTracks[i] = track
+						}
 					}
 					
-					m.CurrentTrack = selectedItem
+					// Set the queue to all tracks, starting from the selected one
+					selectedIndex := m.TrackList.Index()
+					m.Player.Queue.Clear()
+					m.Player.Queue.AddTracks(allTracks[selectedIndex:])
+					
+					// Add tracks before the selected one to the end if repeat all is enabled
+					if m.Player.Queue.RepeatMode == player.RepeatAll && selectedIndex > 0 {
+						m.Player.Queue.AddTracks(allTracks[:selectedIndex])
+					}
+					
+					// Play the first track in the queue (which is the selected one)
 					m.IsLoading = true
-					m.ErrorMsg = "" // Clear previous errors
 					
 					return m, tea.Batch(
 						m.Spinner.Tick,
 						GetStreamURLCmd(m.Api, selectedItem.ID),
+					)
+				} else if m.ViewMode == ViewPlaylists {
+					// Handle playlist selection
+					selectedItem, ok := m.ActiveList.SelectedItem().(api.Playlist)
+					if !ok {
+						return m, nil
+					}
+					
+					// Load tracks from the selected playlist
+					m.IsLoading = true
+					return m, tea.Batch(
+						m.Spinner.Tick,
+						GetPlaylistTracksCmd(m.Api, selectedItem.ID),
 					)
 				}
 			}
@@ -156,14 +262,80 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		
+		// Convert tracks to list items
 		items := make([]list.Item, len(msg.tracks))
 		for i, track := range msg.tracks {
 			items[i] = track
 		}
 		
-		m.List.SetItems(items)
+		// Switch to tracks view
+		m.ViewMode = ViewTracks
+		m.ActiveList = &m.TrackList
+		m.TrackList.SetItems(items)
 		m.SearchInput.SetValue("")
 		m.SearchResults = len(msg.tracks)
+		return m, nil
+		
+	case playlistsResultMsg:
+		m.IsLoading = false
+		
+		if msg.err != nil {
+			m.ErrorMsg = "Error fetching playlists: " + msg.err.Error()
+			return m, nil
+		}
+		
+		if len(msg.playlists) == 0 {
+			m.ErrorMsg = "No playlists found"
+			return m, nil
+		}
+		
+		// Store playlists
+		m.Playlists = msg.playlists
+		
+		// Convert playlists to list items
+		items := make([]list.Item, len(msg.playlists))
+		for i, playlist := range msg.playlists {
+			items[i] = playlist
+		}
+		
+		// Update the playlist list
+		m.PlaylistList.SetItems(items)
+		return m, nil
+		
+	case playlistTracksResultMsg:
+		m.IsLoading = false
+		
+		if msg.err != nil {
+			m.ErrorMsg = "Error fetching playlist tracks: " + msg.err.Error()
+			return m, nil
+		}
+		
+		if len(msg.tracks) == 0 {
+			m.ErrorMsg = "No tracks found in playlist"
+			return m, nil
+		}
+		
+		// Convert tracks to list items
+		items := make([]list.Item, len(msg.tracks))
+		for i, track := range msg.tracks {
+			items[i] = track
+		}
+		
+		// Switch to tracks view
+		m.ViewMode = ViewTracks
+		m.ActiveList = &m.TrackList
+		m.TrackList.SetItems(items)
+		m.SearchResults = len(msg.tracks)
+		
+		// Update error message to show success
+		selectedPlaylist, ok := m.PlaylistList.SelectedItem().(api.Playlist)
+		if ok {
+			m.ErrorMsg = "Loaded " + selectedPlaylist.PlaylistTitle + " with " + 
+				fmt.Sprintf("%d", m.SearchResults) + " tracks"
+		} else {
+			m.ErrorMsg = "Loaded playlist with " + fmt.Sprintf("%d", m.SearchResults) + " tracks"
+		}
+		
 		return m, nil
 		
 	case streamURLMsg:
@@ -174,25 +346,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		
-		err := m.Player.Play(msg.url, m.CurrentTrack.Duration)
+		// Get the current track from the queue
+		currentTrack := m.Player.Queue.GetCurrentTrack()
+		if currentTrack == nil {
+			m.ErrorMsg = "Error: No track in queue"
+			return m, nil
+		}
+		
+		// Play the track
+		err := m.Player.Play(msg.url, currentTrack.Duration)
 		if err != nil {
 			m.ErrorMsg = "Error playing track: " + err.Error()
 			return m, nil
 		}
 		
-		// Important! Update the current track's duration with the real duration from the player
+		// Update current track info
+		m.CurrentTrack = *currentTrack
+		
+		// Important! Update duration with the real duration from the player
 		if m.Player.Duration > 0 && m.Player.Duration != m.CurrentTrack.Duration {
-			// Create a new copy of the track with the updated duration
 			updatedTrack := m.CurrentTrack
 			updatedTrack.Duration = m.Player.Duration
 			m.CurrentTrack = updatedTrack
 			
-			// Also update the track in the list if it's there
-			for i, item := range m.List.Items() {
-				track, ok := item.(api.Track)
-				if ok && track.ID == m.CurrentTrack.ID {
-					track.Duration = m.Player.Duration
-					m.List.SetItem(i, track)
+			// Also update the track in the queue
+			for i, track := range m.Player.Queue.Tracks {
+				if track.ID == m.CurrentTrack.ID {
+					m.Player.Queue.Tracks[i].Duration = m.Player.Duration
 					break
 				}
 			}
@@ -215,10 +395,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case progressMsg:
 		if m.Player.IsPlaying {
 			m.Player.CurrentPos++
+			
 			if m.Player.CurrentPos >= m.Player.Duration {
+				// The track has ended
 				m.Player.CurrentPos = 0
-				m.Player.IsPlaying = false
-			} else {
+				
+				// Try to play the next track automatically
+				if nextTrack, ok := m.Player.Queue.NextTrack(); ok && nextTrack != nil {
+					// Get stream URL and play
+					go func() {
+						url, err := m.Api.GetStreamURL(nextTrack.ID)
+						if err == nil {
+							m.Player.Play(url, nextTrack.Duration)
+							
+							// Update current track info
+							m.CurrentTrack = *nextTrack
+						}
+					}()
+				} else {
+					m.Player.IsPlaying = false
+				}
+			}
+			
+			if m.Player.IsPlaying {
 				return m, ProgressTickCmd()
 			}
 		}
@@ -228,14 +427,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		
-		m.List.SetWidth(msg.Width - 4)
+		// Update both lists with the new size
+		m.TrackList.SetWidth(msg.Width - 4)
+		m.PlaylistList.SetWidth(msg.Width - 4)
 		
 		// Make sure the list height adapts to smaller windows
 		height := msg.Height - 10
 		if height < 3 {
 			height = 3 // Minimum height to show at least one item
 		}
-		m.List.SetHeight(height)
+		m.TrackList.SetHeight(height)
+		m.PlaylistList.SetHeight(height)
 		
 		m.Progress.Width = msg.Width - 10
 		
@@ -254,8 +456,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SearchInput, cmd = m.SearchInput.Update(msg)
 		cmds = append(cmds, cmd)
 	} else {
-		m.List, cmd = m.List.Update(msg)
-		cmds = append(cmds, cmd)
+		// Update the active list
+		if m.ActiveList != nil {
+			*m.ActiveList, cmd = m.ActiveList.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	}
 	
 	return m, tea.Batch(cmds...)

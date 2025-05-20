@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"strings"
+	
+	"ytmusic/internal/player"
 )
 
 // View renders the UI and returns it as a string
@@ -39,20 +41,68 @@ func (m *Model) View() string {
 		s.WriteString(errorStyle.Render(m.ErrorMsg) + "\n\n")
 	}
 	
-	// Search results info
-	if m.SearchResults > 0 && !m.SearchMode {
-		s.WriteString(resultInfoStyle.Render(fmt.Sprintf("Found %d tracks. Use ↑/↓ to navigate and Enter to play.\n\n", m.SearchResults)))
+	// Currently active list
+	var listView string
+	if m.ViewMode == ViewTracks {
+		// Show track list with search results info if we have some
+		if m.SearchResults > 0 && !m.SearchMode {
+			s.WriteString(resultInfoStyle.Render(fmt.Sprintf("Found %d tracks. Use ↑/↓ to navigate and Enter to play.\n\n", m.SearchResults)))
+		}
+		listView = m.TrackList.View()
+	} else {
+		// Show playlist list
+		listView = m.PlaylistList.View()
 	}
 	
-	// Search or music list
-	listView := m.List.View()
+	// Search input
+	if m.SearchMode {
+		searchView := m.SearchInput.View()
+		s.WriteString(fmt.Sprintf("%s\n\n%s\n\n%s",
+			titleStyle.Render("YouTube Music - Search"),
+			searchView,
+			listView))
+	} else {
+		// Current playing info
+		currentlyPlaying := renderPlayingInfo(m)
+		
+		// Status bar with controls
+		statusBar := renderStatusBar(m)
+		
+		s.WriteString(fmt.Sprintf("%s\n\n%s\n\n%s",
+			listView,
+			currentlyPlaying,
+			statusBar))
+	}
 	
-	// Current playing info
-	currentlyPlaying := ""
-	if m.CurrentTrack.ID != "" {
+	return appStyle.Render(s.String())
+}
+
+// renderPlayingInfo renders the currently playing track info with progress bar
+func renderPlayingInfo(m *Model) string {
+	currentTrack := m.Player.Queue.GetCurrentTrack()
+	
+	if currentTrack != nil {
+		// Get status icons
 		playStatus := "⏸️"
 		if m.Player.IsPlaying {
 			playStatus = "▶️"
+		}
+		
+		// Get repeat mode icon
+		repeatIcon := ""
+		switch m.Player.Queue.RepeatMode {
+		case player.RepeatNone:
+			repeatIcon = "🔁 Off"
+		case player.RepeatOne:
+			repeatIcon = "🔂 One"
+		case player.RepeatAll:
+			repeatIcon = "🔁 All"
+		}
+		
+		// Get shuffle mode icon
+		shuffleIcon := "🔀 Off"
+		if m.Player.Queue.ShuffleMode {
+			shuffleIcon = "🔀 On"
 		}
 		
 		// Format time as MM:SS
@@ -67,36 +117,68 @@ func (m *Model) View() string {
 		
 		progressBar := m.Progress.ViewAs(float64(m.Player.CurrentPos) / float64(m.Player.Duration))
 		
-		currentlyPlaying = fmt.Sprintf(
-			"%s %s - %s\n%s\n%s",
+		playbackControls := fmt.Sprintf("  %s  %s", repeatIcon, shuffleIcon)
+		
+		// Add queue position info
+		queueInfo := ""
+		if len(m.Player.Queue.Tracks) > 0 {
+			currentIndex := 0
+			totalTracks := len(m.Player.Queue.Tracks)
+			
+			for i, track := range m.Player.Queue.Tracks {
+				if track.ID == currentTrack.ID {
+					currentIndex = i + 1
+					break
+				}
+			}
+			
+			queueInfo = fmt.Sprintf(" (%d/%d in queue)", currentIndex, totalTracks)
+		}
+		
+		return fmt.Sprintf(
+			"%s %s - %s%s\n%s\n%s%s",
 			playStatus,
-			playingStyle.Render(m.CurrentTrack.TrackTitle), // Changed from Title to TrackTitle
-			infoStyle.Render(m.CurrentTrack.Artist),
+			playingStyle.Render(currentTrack.TrackTitle),
+			infoStyle.Render(currentTrack.Artist),
+			queueInfo,
 			progressBar,
 			timeInfo,
+			playbackControls,
 		)
 	} else {
-		currentlyPlaying = "No song playing"
+		return "No song playing"
 	}
-	
-	// Status bar with controls
-	statusBar := statusBarStyle.Render(
-		"[q] Quit  [↑/↓] Navigate  [Enter] Play  [Space] Pause/Play  [/] Search  [r] Reset Cookie")
-	
-	// If in search mode, show search input
-	if m.SearchMode {
-		searchView := m.SearchInput.View()
-		s.WriteString(fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s", 
-			titleStyle.Render("YouTube Music - Search"), 
-			searchView, 
-			listView, 
-			statusBar))
-	} else {
-		s.WriteString(fmt.Sprintf("%s\n\n%s\n\n%s", 
-			listView, 
-			currentlyPlaying, 
-			statusBar))
-	}
-	
-	return appStyle.Render(s.String())
 }
+
+// renderStatusBar renders the status bar with controls
+func renderStatusBar(m *Model) string {
+	// Basic controls
+	controls := []string{
+		"[q] Quit",
+		"[↑/↓] Navigate",
+		"[Enter] Play/Select",
+		"[Space] Pause/Play",
+		"[/] Search",
+	}
+	
+	// Add playback controls
+	controls = append(controls, 
+		"[n] Next",
+		"[b] Previous",
+		"[r] Repeat Mode",
+		"[s] Shuffle",
+	)
+	
+	// Add view toggle
+	viewToggle := "[p] Show Playlists"
+	if m.ViewMode == ViewPlaylists {
+		viewToggle = "[p] Show Tracks"
+	}
+	controls = append(controls, viewToggle)
+	
+	// Add reset cookie
+	controls = append(controls, "[R] Reset Cookie")
+	
+	return statusBarStyle.Render(strings.Join(controls, "  "))
+}
+

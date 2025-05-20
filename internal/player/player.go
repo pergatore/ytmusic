@@ -14,11 +14,13 @@ import (
 
 // Player handles music playback
 type Player struct {
-	cmd        *exec.Cmd
-	IsPlaying  bool
-	CurrentPos int
-	Duration   int
-	logger     *log.Logger
+	cmd          *exec.Cmd
+	Queue        *Queue
+	IsPlaying    bool
+	CurrentPos   int
+	Duration     int
+	logger       *log.Logger
+	nextCallback func() // Callback for when a track ends
 }
 
 // NewPlayer creates a new Player instance
@@ -36,12 +38,17 @@ func NewPlayer(debugMode bool) *Player {
 		}
 	}
 	
-	return &Player{
+	p := &Player{
 		IsPlaying:  false,
 		CurrentPos: 0,
 		Duration:   0,
 		logger:     logger,
 	}
+	
+	// Create queue with logging function
+	p.Queue = NewQueue(p.LogDebug)
+	
+	return p
 }
 
 // LogDebug logs messages if in debug mode
@@ -49,6 +56,11 @@ func (p *Player) LogDebug(format string, v ...interface{}) {
 	if p.logger != nil {
 		p.logger.Printf(format, v...)
 	}
+}
+
+// SetNextCallback sets a callback to be called when a track ends
+func (p *Player) SetNextCallback(callback func()) {
+	p.nextCallback = callback
 }
 
 // Play starts playback of a URL
@@ -104,7 +116,33 @@ func (p *Player) Play(url string, duration int) error {
 	p.CurrentPos = 0
 	p.Duration = duration
 	
+	// Start a goroutine to monitor playback end
+	go p.monitorPlayback()
+	
 	return nil
+}
+
+// monitorPlayback waits for the current track to end
+func (p *Player) monitorPlayback() {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+	
+	// Wait for the process to finish
+	p.cmd.Wait()
+	
+	// Only proceed if the track actually finished (not stopped manually)
+	if p.IsPlaying && p.CurrentPos >= p.Duration-1 {
+		p.LogDebug("Track finished naturally, advancing to next")
+		p.IsPlaying = false
+		
+		// Call the next callback if set
+		if p.nextCallback != nil {
+			p.nextCallback()
+		}
+	} else {
+		p.LogDebug("Track was stopped manually or still playing")
+	}
 }
 
 // Stop stops the current playback
@@ -133,4 +171,67 @@ func (p *Player) TogglePause() {
 	}
 	
 	p.IsPlaying = !p.IsPlaying
+}
+
+// PlayTrack plays a specific track from the queue
+func (p *Player) PlayTrack(index int) error {
+	if !p.Queue.PlayTrack(index) {
+		return fmt.Errorf("invalid track index: %d", index)
+	}
+	
+	track := p.Queue.GetCurrentTrack()
+	if track == nil {
+		return fmt.Errorf("no track to play")
+	}
+	
+	// Get stream URL and play
+	return p.PlayCurrentTrack()
+}
+
+// PlayCurrentTrack plays the current track in the queue
+func (p *Player) PlayCurrentTrack() error {
+	track := p.Queue.GetCurrentTrack()
+	if track == nil {
+		return fmt.Errorf("no track to play")
+	}
+	
+	// Here you would get the stream URL from the API
+	// For now, we'll use a simplified approach
+	url := "https://www.youtube.com/watch?v=" + track.ID
+	
+	return p.Play(url, track.Duration)
+}
+
+// PlayNext plays the next track in the queue
+func (p *Player) PlayNext() error {
+	track, ok := p.Queue.NextTrack()
+	if !ok || track == nil {
+		return fmt.Errorf("no next track available")
+	}
+	
+	// Get stream URL and play
+	url := "https://www.youtube.com/watch?v=" + track.ID
+	return p.Play(url, track.Duration)
+}
+
+// PlayPrevious plays the previous track in the queue
+func (p *Player) PlayPrevious() error {
+	track, ok := p.Queue.PreviousTrack()
+	if !ok || track == nil {
+		return fmt.Errorf("no previous track available")
+	}
+	
+	// Get stream URL and play
+	url := "https://www.youtube.com/watch?v=" + track.ID
+	return p.Play(url, track.Duration)
+}
+
+// ToggleShuffle toggles shuffle mode
+func (p *Player) ToggleShuffle() {
+	p.Queue.ToggleShuffleMode()
+}
+
+// CycleRepeatMode cycles through repeat modes
+func (p *Player) CycleRepeatMode() PlaybackMode {
+	return p.Queue.CycleRepeatMode()
 }
