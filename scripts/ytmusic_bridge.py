@@ -112,12 +112,24 @@ class YouTubeMusicBridge:
     
     def _authenticate_with_headers(self):
         """Try to authenticate with headers file"""
+        # Try OAuth first (more stable)
+        oauth_path = os.path.expanduser("~/.ytmusic/oauth_auth.json")
+        if os.path.exists(oauth_path):
+            try:
+                self.ytmusic = YTMusic(oauth_path)
+                self.authenticated = True
+                logging.info(f"Authenticated using OAuth: {oauth_path}")
+                return
+            except Exception as e:
+                logging.error(f"OAuth authentication failed: {e}")
+        
+        # Fall back to browser headers
         headers_path = os.path.expanduser("~/.ytmusic/headers_auth.json")
         if os.path.exists(headers_path):
             try:
                 self.ytmusic = YTMusic(headers_path)
                 self.authenticated = True
-                logging.info(f"Authenticated using {headers_path}")
+                logging.info(f"Authenticated using headers: {headers_path}")
             except Exception as e:
                 logging.error(f"Headers authentication failed: {e}")
     
