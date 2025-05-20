@@ -21,8 +21,12 @@ func (m *Model) View() string {
 		return appStyle.Render(
 			titleStyle.Render("YouTube Music TUI") + "\n\n" +
 			"You need to authenticate with YouTube Music to use this application.\n\n" +
-			"Please run this command in a separate terminal:\n" +
-			warningStyle.Render("ytmusicapi browser --file ~/.ytmusic/headers_auth.json") + "\n\n" +
+			warningStyle.Render("Recommended: OAuth Authentication") + "\n" +
+			"1. Follow the OAuth setup guide in the README.md\n" +
+			"2. Run: ytmusicapi oauth --file ~/.ytmusic/oauth_auth.json\n\n" +
+			warningStyle.Render("Alternative: Browser Authentication") + "\n" +
+			"1. Run: ytmusicapi browser --file ~/.ytmusic/headers_auth.json\n" +
+			"2. Follow the browser header copying instructions\n\n" +
 			"Then restart this application.\n\n" +
 			"Press 'q' to quit.")
 	}
