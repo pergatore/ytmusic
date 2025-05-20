@@ -1,3 +1,14 @@
+<div align="center">
+
+![YouTube Music TUI Header](https://raw.githubusercontent.com/pergatore/ytmusic/main/docs/header.svg)
+
+[![Go](https://img.shields.io/badge/Go-1.18+-00ADD8?style=flat&logo=go)](https://golang.org/)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python)](https://python.org/)
+[![ytmusicapi](https://img.shields.io/badge/ytmusicapi-latest-FF0000?style=flat&logo=youtube-music)](https://github.com/sigma67/ytmusicapi)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+</div>
+
 # YouTube Music TUI
 
 A terminal user interface for YouTube Music, built with Go and [Bubbletea](https://github.com/charmbracelet/bubbletea). This application uses a Python bridge to interact with the YouTube Music API via [ytmusicapi](https://github.com/sigma67/ytmusicapi).

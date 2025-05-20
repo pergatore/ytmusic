@@ -1,0 +1,88 @@
+<svg viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for background -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2d2d2d;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Gradient for music bars -->
+    <linearGradient id="barGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff0000;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ff4444;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff6666;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="200" fill="url(#bgGradient)" rx="15"/>
+  
+  <!-- Terminal window mockup -->
+  <rect x="50" y="40" width="500" height="120" fill="#1e1e1e" stroke="#444" stroke-width="2" rx="8"/>
+  
+  <!-- Terminal header -->
+  <rect x="50" y="40" width="500" height="25" fill="#333" rx="8 8 0 0"/>
+  <circle cx="65" cy="52.5" r="4" fill="#ff5f56"/>
+  <circle cx="80" cy="52.5" r="4" fill="#ffbd2e"/>
+  <circle cx="95" cy="52.5" r="4" fill="#27ca3f"/>
+  
+  <!-- Terminal content -->
+  <text x="60" y="85" font-family="monospace" font-size="12" fill="#00ff00">$ ytmusic</text>
+  <text x="60" y="105" font-family="monospace" font-size="10" fill="#888">YouTube Music TUI</text>
+  
+  <!-- Music bars visualization -->
+  <g transform="translate(60, 115)">
+    <rect x="0" y="15" width="3" height="20" fill="url(#barGradient)" opacity="0.8"/>
+    <rect x="8" y="10" width="3" height="25" fill="url(#barGradient)" opacity="0.9"/>
+    <rect x="16" y="5" width="3" height="30" fill="url(#barGradient)"/>
+    <rect x="24" y="8" width="3" height="27" fill="url(#barGradient)" opacity="0.7"/>
+    <rect x="32" y="12" width="3" height="23" fill="url(#barGradient)" opacity="0.8"/>
+    <rect x="40" y="3" width="3" height="32" fill="url(#barGradient)"/>
+    <rect x="48" y="18" width="3" height="17" fill="url(#barGradient)" opacity="0.6"/>
+    <rect x="56" y="7" width="3" height="28" fill="url(#barGradient)" opacity="0.9"/>
+  </g>
+  
+  <!-- Progress bar -->
+  <rect x="60" y="140" width="200" height="4" fill="#444" rx="2"/>
+  <rect x="60" y="140" width="80" height="4" fill="#ff0000" rx="2"/>
+  
+  <!-- Main title -->
+  <text x="600" y="80" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#ffffff" filter="url(#glow)">
+    YouTube Music
+  </text>
+  <text x="600" y="115" font-family="Arial, sans-serif" font-size="28" font-weight="300" fill="#ff0000">
+    Terminal UI
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="140" font-family="Arial, sans-serif" font-size="14" fill="#aaa">
+    A modern TUI for YouTube Music
+  </text>
+  <text x="600" y="158" font-family="Arial, sans-serif" font-size="14" fill="#aaa">
+    Built with Go + Python
+  </text>
+  
+  <!-- Decorative elements -->
+  <circle cx="720" cy="50" r="3" fill="#ff0000" opacity="0.6">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="740" cy="45" r="2" fill="#ff4444" opacity="0.8">
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="760" cy="55" r="2.5" fill="#ff6666" opacity="0.7">
+    <animate attributeName="opacity" values="0.4;1;0.4" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Corner accent -->
+  <path d="M 750 160 L 780 160 L 780 180 L 760 180 Z" fill="#ff0000" opacity="0.3"/>
+  <path d="M 755 165 L 775 165 L 775 175 L 765 175 Z" fill="#ff0000" opacity="0.5"/>
+</svg>
