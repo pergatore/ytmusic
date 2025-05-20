@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YouTube Music API Bridge Script
+YouTube Music API Bridge Script - Fixed Import Issues
 Command-line interface for the Go application to interact with ytmusicapi
 """
 
@@ -9,18 +9,71 @@ import json
 import sys
 import os
 import logging
+import subprocess
 from typing import List, Dict, Optional, Any
 
 # Add the current directory to path to import our module
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Try multiple ways to import ytmusicapi
+ytmusicapi_available = False
+YTMusic = None
+
+# Method 1: Direct import
 try:
     from ytmusicapi import YTMusic
-except ImportError:
+    ytmusicapi_available = True
+    logging.info("ytmusicapi imported successfully (direct)")
+except ImportError as e:
+    logging.warning(f"Direct import failed: {e}")
+
+# Method 2: Try adding user site-packages to path
+if not ytmusicapi_available:
+    try:
+        import site
+        user_site = site.getusersitepackages()
+        if user_site not in sys.path:
+            sys.path.insert(0, user_site)
+        
+        from ytmusicapi import YTMusic
+        ytmusicapi_available = True
+        logging.info("ytmusicapi imported successfully (user site-packages)")
+    except ImportError as e:
+        logging.warning(f"User site-packages import failed: {e}")
+
+# Method 3: Find ytmusicapi installation location
+if not ytmusicapi_available:
+    try:
+        # Try to find where pip installed it
+        result = subprocess.run(['pip3', 'show', 'ytmusicapi'], 
+                               capture_output=True, text=True)
+        if result.returncode == 0:
+            lines = result.stdout.split('\n')
+            location = None
+            for line in lines:
+                if line.startswith('Location: '):
+                    location = line.replace('Location: ', '').strip()
+                    break
+            
+            if location and location not in sys.path:
+                sys.path.insert(0, location)
+                from ytmusicapi import YTMusic
+                ytmusicapi_available = True
+                logging.info(f"ytmusicapi imported successfully (found at {location})")
+    except Exception as e:
+        logging.warning(f"pip show method failed: {e}")
+
+# Final check
+if not ytmusicapi_available:
     print(json.dumps({
         "success": False,
-        "error": "ytmusicapi not installed. Run: pip install ytmusicapi",
-        "traceback": "ImportError: No module named 'ytmusicapi'"
+        "error": "ytmusicapi not found. Please check installation.",
+        "traceback": f"Tried paths: {sys.path[:5]}...",
+        "suggestions": [
+            "Try: pip3 install --user ytmusicapi",
+            "Or: sudo pip3 install ytmusicapi",
+            "Check with: python3 -c 'import ytmusicapi; print(ytmusicapi.__file__)'"
+        ]
     }))
     sys.exit(1)
 
@@ -74,6 +127,7 @@ class YouTubeMusicBridge:
             if not self.ytmusic:
                 raise Exception("YTMusic client not initialized")
             
+            logging.info(f"Searching for: {query}")
             results = self.ytmusic.search(query, filter="songs", limit=limit)
             
             tracks = []
@@ -82,6 +136,7 @@ class YouTubeMusicBridge:
                 if track:
                     tracks.append(track)
             
+            logging.info(f"Found {len(tracks)} tracks")
             return tracks
         except Exception as e:
             logging.error(f"Search error: {e}")
@@ -97,19 +152,60 @@ class YouTubeMusicBridge:
                 logging.warning("Not authenticated - cannot fetch personal playlists")
                 return []
             
+            logging.info("Fetching library playlists...")
             playlists = self.ytmusic.get_library_playlists(limit=limit)
             
+            # Debug: Check what we actually got
+            logging.info(f"Raw playlists type: {type(playlists)}")
+            if playlists and len(playlists) > 0:
+                logging.info(f"First playlist type: {type(playlists[0])}")
+                logging.info(f"First playlist keys: {list(playlists[0].keys()) if isinstance(playlists[0], dict) else 'Not a dict'}")
+
             formatted_playlists = []
-            for playlist in playlists:
-                formatted_playlist = {
-                    'id': playlist.get('playlistId', ''),
-                    'title': playlist.get('title', 'Unknown Playlist'),
-                    'description': playlist.get('description', ''),
-                    'track_count': playlist.get('count', 0),
-                    'author': playlist.get('author', {}).get('name', 'Unknown') if playlist.get('author') else 'Unknown'
-                }
-                formatted_playlists.append(formatted_playlist)
+            for i, playlist in enumerate(playlists):
+                try:
+                    # Handle case where playlist might not be a dict
+                    if not isinstance(playlist, dict):
+                        logging.warning(f"Playlist {i} is not a dict: {type(playlist)}")
+                        continue
+                        
+                    # Extract playlist info more carefully
+                    playlist_id = playlist.get('playlistId') or playlist.get('id', '')
+                    title = playlist.get('title', 'Unknown Playlist')
+                    description = playlist.get('description', '')
+                    
+                    # Handle count field which might be different types
+                    count = playlist.get('count', 0)
+                    if isinstance(count, str):
+                        try:
+                            count = int(count.replace(',', ''))
+                        except:
+                            count = 0
+                    
+                    # Handle author field more carefully
+                    author = 'Unknown'
+                    if 'author' in playlist:
+                        author_data = playlist['author']
+                        if isinstance(author_data, dict):
+                            author = author_data.get('name', 'Unknown')
+                        elif isinstance(author_data, str):
+                            author = author_data
+                    
+                    formatted_playlist = {
+                        'id': playlist_id,
+                        'title': title,
+                        'description': description,
+                        'track_count': count,
+                        'author': author
+                    }
+                    formatted_playlists.append(formatted_playlist)
+                    logging.debug(f"Formatted playlist {i}: {title}")
+                    
+                except Exception as e:
+                    logging.error(f"Error formatting playlist {i}: {e}")
+                    continue
             
+            logging.info(f"Found {len(formatted_playlists)} playlists")
             return formatted_playlists
         except Exception as e:
             logging.error(f"Get playlists error: {e}")
@@ -124,6 +220,8 @@ class YouTubeMusicBridge:
             if not self.authenticated:
                 logging.warning("Not authenticated - cannot fetch playlist tracks")
                 return []
+            
+            logging.info(f"Fetching tracks for playlist: {playlist_id}")
             
             # Handle special playlists
             if playlist_id == 'LM':  # Liked songs
@@ -142,6 +240,7 @@ class YouTubeMusicBridge:
                 if formatted_track:
                     formatted_tracks.append(formatted_track)
             
+            logging.info(f"Found {len(formatted_tracks)} tracks")
             return formatted_tracks
         except Exception as e:
             logging.error(f"Get playlist tracks error: {e}")
@@ -157,6 +256,7 @@ class YouTubeMusicBridge:
                 logging.warning("Not authenticated - cannot fetch liked songs")
                 return []
             
+            logging.info("Fetching liked songs...")
             result = self.ytmusic.get_liked_songs(limit=limit)
             tracks = result.get('tracks', []) if isinstance(result, dict) else result
             
@@ -166,6 +266,7 @@ class YouTubeMusicBridge:
                 if formatted_track:
                     formatted_tracks.append(formatted_track)
             
+            logging.info(f"Found {len(formatted_tracks)} liked songs")
             return formatted_tracks
         except Exception as e:
             logging.error(f"Get liked songs error: {e}")
@@ -174,22 +275,50 @@ class YouTubeMusicBridge:
     def _format_track(self, track: Dict) -> Optional[Dict[str, Any]]:
         """Format a track with proper duration parsing"""
         try:
-            # Extract video ID
-            video_id = track.get('videoId') or track.get('id')
+            # Debug: log the track structure
+            logging.debug(f"Formatting track: {track.keys() if isinstance(track, dict) else type(track)}")
+            
+            # Handle case where track might not be a dict
+            if not isinstance(track, dict):
+                logging.warning(f"Track is not a dict: {type(track)}")
+                return None
+            
+            # Extract video ID - try multiple possible fields
+            video_id = None
+            for id_field in ['videoId', 'id', 'videoID']:
+                if id_field in track and track[id_field]:
+                    video_id = track[id_field]
+                    break
+            
             if not video_id:
+                logging.debug(f"Track missing video ID, available keys: {list(track.keys())}")
                 return None
             
             # Extract title
             title = track.get('title', 'Unknown Title')
             
-            # Extract artists
+            # Extract artists - handle multiple possible structures
             artists = []
             if 'artists' in track and track['artists']:
-                for artist in track['artists']:
-                    if isinstance(artist, dict):
-                        artists.append(artist.get('name', ''))
-                    else:
-                        artists.append(str(artist))
+                artist_list = track['artists']
+                if isinstance(artist_list, list):
+                    for artist in artist_list:
+                        if isinstance(artist, dict):
+                            artists.append(artist.get('name', ''))
+                        elif isinstance(artist, str):
+                            artists.append(artist)
+                elif isinstance(artist_list, str):
+                    artists.append(artist_list)
+            elif 'artist' in track:
+                artist_data = track['artist']
+                if isinstance(artist_data, list):
+                    for artist in artist_data:
+                        if isinstance(artist, dict):
+                            artists.append(artist.get('name', ''))
+                        else:
+                            artists.append(str(artist))
+                else:
+                    artists.append(str(artist_data))
             
             artist_str = ', '.join(filter(None, artists)) or 'Unknown Artist'
             
@@ -199,17 +328,24 @@ class YouTubeMusicBridge:
             # Get thumbnail
             thumbnail = ""
             if 'thumbnails' in track and track['thumbnails']:
-                thumbnail = track['thumbnails'][0].get('url', '')
+                thumbnails = track['thumbnails']
+                if isinstance(thumbnails, list) and len(thumbnails) > 0:
+                    thumbnail = thumbnails[0].get('url', '') if isinstance(thumbnails[0], dict) else ''
             
-            return {
+            formatted_track = {
                 'id': video_id,
                 'title': title,
                 'artist': artist_str,
                 'duration': duration_seconds,
                 'thumbnail': thumbnail
             }
+            
+            logging.debug(f"Successfully formatted track: {title} - {artist_str}")
+            return formatted_track
+            
         except Exception as e:
-            logging.warning(f"Error formatting track: {e}")
+            logging.error(f"Error formatting track: {e}")
+            logging.debug(f"Track data: {track}")
             return None
     
     def _parse_duration(self, track: Dict) -> int:
@@ -323,4 +459,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
