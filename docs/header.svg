@@ -16,8 +16,8 @@
   <!-- Terminal window -->
   <rect x="20" y="20" width="360" height="180" fill="#1e1e1e" stroke="#444" stroke-width="2" rx="12" filter="url(#shadow)"/>
   
-  <!-- Terminal header -->
-  <rect x="22" y="22" width="356" height="28" fill="#333" rx="8 8 0 0"/>
+  <!-- Terminal header with matching rounded corners -->
+  <rect x="22" y="22" width="356" height="28" fill="#333" rx="10"/>
   
   <!-- Traffic light buttons -->
   <circle cx="40" cy="36" r="6" fill="#ff5f56"/>
