@@ -20,11 +20,11 @@ func (m *Model) View() string {
 	if m.LoginMode {
 		return appStyle.Render(
 			titleStyle.Render("YouTube Music TUI") + "\n\n" +
-			"You need to log in to YouTube Music to use this application.\n\n" +
-			"Press 'l' to log in or 'q' to quit.\n\n" +
-			"When logging in, you'll need to provide authentication via ytmusicapi.\n\n" +
-			warningStyle.Render("Run: ytmusicapi browser --file ~/.ytmusic/headers_auth.json") + "\n" +
-			warningStyle.Render("Then restart the application."))
+			"You need to authenticate with YouTube Music to use this application.\n\n" +
+			"Please run this command in a separate terminal:\n" +
+			warningStyle.Render("ytmusicapi browser --file ~/.ytmusic/headers_auth.json") + "\n\n" +
+			"Then restart this application.\n\n" +
+			"Press 'q' to quit.")
 	}
 	
 	if m.IsLoading {
