@@ -1,11 +1,5 @@
-<svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 400 220" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Gradient for background -->
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#2d2d2d;stop-opacity:1" />
-    </linearGradient>
-    
     <!-- Gradient for music bars -->
     <linearGradient id="barGradient" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" style="stop-color:#ff0000;stop-opacity:1" />
@@ -13,76 +7,78 @@
       <stop offset="100%" style="stop-color:#ff6666;stop-opacity:1" />
     </linearGradient>
     
-    <!-- Glow effect -->
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-      <feMerge> 
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <!-- Drop shadow -->
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.3"/>
     </filter>
   </defs>
   
-  <!-- Background -->
-  <rect width="900" height="200" fill="url(#bgGradient)" rx="15"/>
-  
-  <!-- Terminal window mockup -->
-  <rect x="50" y="40" width="380" height="120" fill="#1e1e1e" stroke="#444" stroke-width="2" rx="8"/>
+  <!-- Terminal window -->
+  <rect x="20" y="20" width="360" height="180" fill="#1e1e1e" stroke="#444" stroke-width="2" rx="12" filter="url(#shadow)"/>
   
   <!-- Terminal header -->
-  <rect x="50" y="40" width="380" height="25" fill="#333" rx="8 8 0 0"/>
-  <circle cx="65" cy="52.5" r="4" fill="#ff5f56"/>
-  <circle cx="80" cy="52.5" r="4" fill="#ffbd2e"/>
-  <circle cx="95" cy="52.5" r="4" fill="#27ca3f"/>
+  <rect x="22" y="22" width="356" height="28" fill="#333" rx="8 8 0 0"/>
+  
+  <!-- Traffic light buttons -->
+  <circle cx="40" cy="36" r="6" fill="#ff5f56"/>
+  <circle cx="60" cy="36" r="6" fill="#ffbd2e"/>
+  <circle cx="80" cy="36" r="6" fill="#27ca3f"/>
+  
+  <!-- Terminal title -->
+  <text x="200" y="40" font-family="monospace" font-size="12" fill="#ccc" text-anchor="middle">ytmusic</text>
   
   <!-- Terminal content -->
-  <text x="60" y="85" font-family="monospace" font-size="12" fill="#00ff00">$ ytmusic</text>
-  <text x="60" y="105" font-family="monospace" font-size="10" fill="#888">YouTube Music TUI</text>
+  <text x="35" y="80" font-family="monospace" font-size="14" fill="#00ff00">$ ytmusic</text>
+  <text x="35" y="105" font-family="monospace" font-size="11" fill="#888">YouTube Music TUI</text>
   
-  <!-- Music bars visualization -->
-  <g transform="translate(60, 115)">
-    <rect x="0" y="15" width="3" height="20" fill="url(#barGradient)" opacity="0.8"/>
-    <rect x="8" y="10" width="3" height="25" fill="url(#barGradient)" opacity="0.9"/>
-    <rect x="16" y="5" width="3" height="30" fill="url(#barGradient)"/>
-    <rect x="24" y="8" width="3" height="27" fill="url(#barGradient)" opacity="0.7"/>
-    <rect x="32" y="12" width="3" height="23" fill="url(#barGradient)" opacity="0.8"/>
-    <rect x="40" y="3" width="3" height="32" fill="url(#barGradient)"/>
-    <rect x="48" y="18" width="3" height="17" fill="url(#barGradient)" opacity="0.6"/>
-    <rect x="56" y="7" width="3" height="28" fill="url(#barGradient)" opacity="0.9"/>
+  <!-- Currently playing info -->
+  <text x="35" y="125" font-family="monospace" font-size="10" fill="#fff">♪ Playing: Never Gonna Give You Up - Rick Astley</text>
+  
+  <!-- Music visualization bars -->
+  <g transform="translate(35, 135)">
+    <rect x="0" y="15" width="4" height="20" fill="url(#barGradient)" opacity="0.8">
+      <animate attributeName="height" values="15;25;20;30;15" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="20;10;15;5;20" dur="1.5s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="8" y="10" width="4" height="25" fill="url(#barGradient)" opacity="0.9">
+      <animate attributeName="height" values="20;15;30;20;25" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="15;20;5;15;10" dur="1.8s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="16" y="5" width="4" height="30" fill="url(#barGradient)">
+      <animate attributeName="height" values="25;35;20;30;30" dur="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="10;0;15;5;5" dur="1.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="24" y="8" width="4" height="27" fill="url(#barGradient)" opacity="0.7">
+      <animate attributeName="height" values="22;18;32;25;27" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="13;17;3;10;8" dur="2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="32" y="12" width="4" height="23" fill="url(#barGradient)" opacity="0.8">
+      <animate attributeName="height" values="18;28;15;25;23" dur="1.6s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="17;7;20;10;12" dur="1.6s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="40" y="3" width="4" height="32" fill="url(#barGradient)">
+      <animate attributeName="height" values="28;22;35;30;32" dur="1.4s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="7;13;0;5;3" dur="1.4s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="48" y="18" width="4" height="17" fill="url(#barGradient)" opacity="0.6">
+      <animate attributeName="height" values="12;22;10;20;17" dur="1.9s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="23;13;25;15;18" dur="1.9s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="56" y="7" width="4" height="28" fill="url(#barGradient)" opacity="0.9">
+      <animate attributeName="height" values="23;33;18;30;28" dur="1.3s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="12;2;17;5;7" dur="1.3s" repeatCount="indefinite"/>
+    </rect>
   </g>
   
   <!-- Progress bar -->
-  <rect x="60" y="140" width="200" height="4" fill="#444" rx="2"/>
-  <rect x="60" y="140" width="80" height="4" fill="#ff0000" rx="2"/>
+  <rect x="120" y="150" width="140" height="6" fill="#444" rx="3"/>
+  <rect x="120" y="150" width="55" height="6" fill="#ff0000" rx="3">
+    <animate attributeName="width" values="50;70;60;75;55;60;55" dur="12s" repeatCount="indefinite"/>
+  </rect>
   
-  <!-- Main title -->
-  <text x="480" y="80" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" filter="url(#glow)">
-    YouTube Music
-  </text>
-  <text x="480" y="115" font-family="Arial, sans-serif" font-size="26" font-weight="300" fill="#ff0000">
-    Terminal UI
-  </text>
+  <!-- Time display -->
+  <text x="270" y="155" font-family="monospace" font-size="10" fill="#888">1:23 / 3:32</text>
   
-  <!-- Subtitle -->
-  <text x="480" y="140" font-family="Arial, sans-serif" font-size="14" fill="#aaa">
-    A modern TUI for YouTube Music
-  </text>
-  <text x="480" y="158" font-family="Arial, sans-serif" font-size="14" fill="#aaa">
-    Built with Go + Python
-  </text>
-  
-  <!-- Decorative elements -->
-  <circle cx="820" cy="50" r="3" fill="#ff0000" opacity="0.6">
-    <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="840" cy="45" r="2" fill="#ff4444" opacity="0.8">
-    <animate attributeName="opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="860" cy="55" r="2.5" fill="#ff6666" opacity="0.7">
-    <animate attributeName="opacity" values="0.4;1;0.4" dur="2.5s" repeatCount="indefinite"/>
-  </circle>
-  
-  <!-- Corner accent -->
-  <path d="M 820 160 L 850 160 L 850 180 L 830 180 Z" fill="#ff0000" opacity="0.3"/>
-  <path d="M 825 165 L 845 165 L 845 175 L 835 175 Z" fill="#ff0000" opacity="0.5"/>
+  <!-- Status bar at bottom (moved down more) -->
+  <text x="35" y="180" font-family="monospace" font-size="9" fill="#666">[Space] Pause  [n] Next  [/] Search  [q] Quit</text>
 </svg>
