@@ -10,13 +10,13 @@ import (
 	"time"
 )
 
-// YouTubeMusicAPI handles API requests to YouTube Music
+// YouTubeMusicAPI handles API requests to YouTube Music via Python bridge
 type YouTubeMusicAPI struct {
 	client     *http.Client
-	headers    map[string]string
 	configPath string
 	IsLoggedIn bool
 	logger     *log.Logger
+	bridge     *PythonBridge // Use the Python bridge instead of direct HTTP calls
 }
 
 // NewYouTubeMusicAPI creates a new YouTubeMusicAPI instance
@@ -56,17 +56,13 @@ func NewYouTubeMusicAPI(debugMode bool) *YouTubeMusicAPI {
 	api := &YouTubeMusicAPI{
 		client:     client,
 		configPath: configPath,
-		headers: map[string]string{
-			"User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0",
-			"Accept":          "*/*",
-			"Accept-Language": "en-US,en;q=0.5",
-			"Content-Type":    "application/json",
-			"X-Goog-AuthUser": "0",
-			"Origin":          "https://music.youtube.com",
-		},
 		IsLoggedIn: false,
 		logger:     logger,
 	}
+
+	// Initialize Python bridge
+	api.bridge = NewPythonBridge(configPath, api.LogDebug)
+	api.bridge.SetAPI(api)
 
 	// Try to load cookies
 	api.loadCookies()
@@ -74,6 +70,7 @@ func NewYouTubeMusicAPI(debugMode bool) *YouTubeMusicAPI {
 	if debugMode && logger != nil {
 		logger.Println("YouTubeMusicAPI initialized")
 		logger.Printf("Login status: %v", api.IsLoggedIn)
+		logger.Printf("Python bridge available: %v", api.bridge.IsAvailable())
 	}
 
 	return api
@@ -84,4 +81,88 @@ func (api *YouTubeMusicAPI) LogDebug(format string, v ...interface{}) {
 	if api.logger != nil {
 		api.logger.Printf(format, v...)
 	}
+}
+
+// Search searches for tracks using the Python bridge
+func (api *YouTubeMusicAPI) Search(query string) ([]Track, error) {
+	if !api.IsLoggedIn {
+		return nil, fmt.Errorf("not logged in")
+	}
+
+	api.LogDebug("Searching for: %s", query)
+
+	// Check if Python bridge is available
+	if !api.bridge.IsAvailable() {
+		api.LogDebug("Python bridge not available, falling back to placeholder results")
+		// Return some placeholder results
+		return []Track{
+			{ID: "dQw4w9WgXcQ", TrackTitle: "Sample: " + query, Artist: "Python bridge not available", Duration: 180},
+			{ID: "xvFZjo5PgG0", TrackTitle: "Install ytmusicapi", Artist: "pip install ytmusicapi", Duration: 240},
+		}, nil
+	}
+
+	// Use Python bridge
+	tracks, err := api.bridge.Search(query)
+	if err != nil {
+		api.LogDebug("Python bridge search failed: %v", err)
+		return nil, err
+	}
+
+	api.LogDebug("Found %d tracks via Python bridge", len(tracks))
+	return tracks, nil
+}
+
+// GetUserPlaylists fetches playlists using the Python bridge
+func (api *YouTubeMusicAPI) GetUserPlaylists() ([]Playlist, error) {
+	if !api.IsLoggedIn {
+		return nil, fmt.Errorf("not logged in")
+	}
+
+	api.LogDebug("Fetching user playlists via Python bridge")
+
+	// Check if Python bridge is available
+	if !api.bridge.IsAvailable() {
+		api.LogDebug("Python bridge not available, returning placeholder playlists")
+		return []Playlist{
+			{ID: "PLACEHOLDER_1", PlaylistTitle: "Python Bridge Not Available", PlaylistDesc: "Install ytmusicapi", TrackCount: 0, Author: "System"},
+			{ID: "PLACEHOLDER_2", PlaylistTitle: "Install Dependencies", PlaylistDesc: "pip install ytmusicapi", TrackCount: 0, Author: "System"},
+		}, nil
+	}
+
+	// Use Python bridge
+	playlists, err := api.bridge.GetPlaylists()
+	if err != nil {
+		api.LogDebug("Python bridge get playlists failed: %v", err)
+		return nil, err
+	}
+
+	api.LogDebug("Found %d playlists via Python bridge", len(playlists))
+	return playlists, nil
+}
+
+// GetPlaylistTracks fetches playlist tracks using the Python bridge
+func (api *YouTubeMusicAPI) GetPlaylistTracks(playlistID string) ([]Track, error) {
+	if !api.IsLoggedIn {
+		return nil, fmt.Errorf("not logged in")
+	}
+
+	api.LogDebug("Fetching playlist tracks for ID: %s via Python bridge", playlistID)
+
+	// Check if Python bridge is available
+	if !api.bridge.IsAvailable() {
+		api.LogDebug("Python bridge not available, returning placeholder tracks")
+		return []Track{
+			{ID: "dQw4w9WgXcQ", TrackTitle: "Python Bridge Required", Artist: "Install ytmusicapi", Duration: 180},
+		}, nil
+	}
+
+	// Use Python bridge
+	tracks, err := api.bridge.GetPlaylistTracks(playlistID)
+	if err != nil {
+		api.LogDebug("Python bridge get playlist tracks failed: %v", err)
+		return nil, err
+	}
+
+	api.LogDebug("Found %d tracks in playlist via Python bridge", len(tracks))
+	return tracks, nil
 }

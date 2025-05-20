@@ -1,209 +1,188 @@
 #!/usr/bin/env python3
 """
-Fixed YouTube Music API implementation focusing on playlist and duration issues
+YouTube Music API Bridge Script
+Command-line interface for the Go application to interact with ytmusicapi
 """
 
+import argparse
 import json
+import sys
 import os
 import logging
 from typing import List, Dict, Optional, Any
-from ytmusicapi import YTMusic
 
-class YouTubeMusicClient:
-    def __init__(self, auth_file: str = None):
-        """
-        Initialize YouTube Music client with proper authentication
-        
-        Args:
-            auth_file: Path to headers_auth.json file
-        """
-        self.logger = logging.getLogger(__name__)
+# Add the current directory to path to import our module
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from ytmusicapi import YTMusic
+except ImportError:
+    print(json.dumps({
+        "success": False,
+        "error": "ytmusicapi not installed. Run: pip install ytmusicapi",
+        "traceback": "ImportError: No module named 'ytmusicapi'"
+    }))
+    sys.exit(1)
+
+
+class YouTubeMusicBridge:
+    def __init__(self, cookie: str = None):
+        """Initialize the bridge with optional cookie authentication"""
         self.ytmusic = None
         self.authenticated = False
         
-        # Try to authenticate
-        self._authenticate(auth_file)
+        if cookie:
+            try:
+                # Try to use cookie-based authentication
+                # Note: ytmusicapi doesn't directly support cookies, so we'll try headers auth
+                self._authenticate_with_cookie(cookie)
+            except Exception as e:
+                logging.error(f"Cookie authentication failed: {e}")
+        
+        # Try to authenticate with existing headers file
+        if not self.authenticated:
+            self._authenticate_with_headers()
+        
+        # Fall back to no authentication
+        if not self.authenticated:
+            try:
+                self.ytmusic = YTMusic()
+                logging.warning("Running without authentication - limited functionality")
+            except Exception as e:
+                raise Exception(f"Failed to initialize YTMusic: {e}")
     
-    def _authenticate(self, auth_file: str = None):
-        """Authenticate with YouTube Music"""
-        
-        # Try provided auth file
-        if auth_file and os.path.exists(auth_file):
+    def _authenticate_with_cookie(self, cookie: str):
+        """Try to authenticate with a cookie (this is a simplified approach)"""
+        # For now, we'll skip cookie auth since ytmusicapi prefers headers
+        # In a real implementation, you'd convert the cookie to headers format
+        pass
+    
+    def _authenticate_with_headers(self):
+        """Try to authenticate with headers file"""
+        headers_path = os.path.expanduser("~/.ytmusic/headers_auth.json")
+        if os.path.exists(headers_path):
             try:
-                self.ytmusic = YTMusic(auth_file)
+                self.ytmusic = YTMusic(headers_path)
                 self.authenticated = True
-                self.logger.info(f"Authenticated using {auth_file}")
-                return
+                logging.info(f"Authenticated using {headers_path}")
             except Exception as e:
-                self.logger.error(f"Auth file {auth_file} failed: {e}")
-        
-        # Try default location
-        default_auth = os.path.expanduser("~/.ytmusic/headers_auth.json")
-        if os.path.exists(default_auth):
-            try:
-                self.ytmusic = YTMusic(default_auth)
-                self.authenticated = True
-                self.logger.info(f"Authenticated using {default_auth}")
-                return
-            except Exception as e:
-                self.logger.error(f"Default auth file failed: {e}")
-        
-        # Initialize without auth (limited functionality)
+                logging.error(f"Headers authentication failed: {e}")
+    
+    def search_tracks(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search for tracks"""
         try:
-            self.ytmusic = YTMusic()
-            self.authenticated = False
-            self.logger.warning("Running without authentication - limited functionality")
+            if not self.ytmusic:
+                raise Exception("YTMusic client not initialized")
+            
+            results = self.ytmusic.search(query, filter="songs", limit=limit)
+            
+            tracks = []
+            for item in results:
+                track = self._format_track(item)
+                if track:
+                    tracks.append(track)
+            
+            return tracks
         except Exception as e:
-            self.logger.error(f"Failed to initialize YTMusic: {e}")
+            logging.error(f"Search error: {e}")
             raise
     
-    def get_playlists(self) -> List[Dict[str, Any]]:
-        """Get user's playlists with better error handling"""
-        if not self.ytmusic:
-            raise Exception("YTMusic client not initialized")
-        
-        if not self.authenticated:
-            self.logger.error("Not authenticated - cannot fetch personal playlists")
-            self.logger.info("To authenticate, run: ytmusicapi headers ~/.ytmusic/headers_auth.json")
-            return []
-        
+    def get_playlists(self, limit: int = 25) -> List[Dict[str, Any]]:
+        """Get user playlists"""
         try:
-            # Get library playlists
-            self.logger.info("Fetching library playlists...")
-            playlists = self.ytmusic.get_library_playlists(limit=25)
+            if not self.ytmusic:
+                raise Exception("YTMusic client not initialized")
             
-            if playlists:
-                self.logger.info(f"Found {len(playlists)} library playlists")
-                return self._format_playlists(playlists)
+            if not self.authenticated:
+                logging.warning("Not authenticated - cannot fetch personal playlists")
+                return []
             
-            # If no library playlists, try to get some default ones
-            self.logger.info("No library playlists found, trying other methods...")
+            playlists = self.ytmusic.get_library_playlists(limit=limit)
             
-            # Try getting liked songs playlist
-            try:
-                history = self.ytmusic.get_history()
-                if history:
-                    self.logger.info("Found history, creating history playlist")
-                    return [{
-                        'playlistId': 'HISTORY',
-                        'title': 'Recently Played',
-                        'description': 'Your recently played tracks',
-                        'count': len(history),
-                        'thumbnails': []
-                    }]
-            except Exception as e:
-                self.logger.warning(f"Could not get history: {e}")
-            
-            # Try searching for popular playlists as fallback
-            try:
-                self.logger.info("Trying to find public playlists...")
-                search_results = self.ytmusic.search("top hits", filter="playlists", limit=5)
-                if search_results:
-                    return self._format_search_playlists(search_results)
-            except Exception as e:
-                self.logger.warning(f"Could not search playlists: {e}")
-            
-            self.logger.warning("No playlists found")
-            return []
-            
-        except Exception as e:
-            self.logger.error(f"Error fetching playlists: {e}")
-            return []
-    
-    def _format_playlists(self, playlists: List[Dict]) -> List[Dict[str, Any]]:
-        """Format playlists for consistency"""
-        formatted = []
-        for playlist in playlists:
-            formatted_playlist = {
-                'playlistId': playlist.get('playlistId', ''),
-                'title': playlist.get('title', 'Unknown Playlist'),
-                'description': playlist.get('description', ''),
-                'count': playlist.get('count', 0),
-                'thumbnails': playlist.get('thumbnails', [])
-            }
-            formatted.append(formatted_playlist)
-        return formatted
-    
-    def _format_search_playlists(self, search_results: List[Dict]) -> List[Dict[str, Any]]:
-        """Format search results as playlists"""
-        formatted = []
-        for item in search_results:
-            if item.get('resultType') == 'playlist':
+            formatted_playlists = []
+            for playlist in playlists:
                 formatted_playlist = {
-                    'playlistId': item.get('browseId', ''),
-                    'title': item.get('title', 'Unknown Playlist'),
-                    'description': item.get('description', 'Public playlist'),
-                    'count': item.get('count', '?'),
-                    'thumbnails': item.get('thumbnails', [])
+                    'id': playlist.get('playlistId', ''),
+                    'title': playlist.get('title', 'Unknown Playlist'),
+                    'description': playlist.get('description', ''),
+                    'track_count': playlist.get('count', 0),
+                    'author': playlist.get('author', {}).get('name', 'Unknown') if playlist.get('author') else 'Unknown'
                 }
-                formatted.append(formatted_playlist)
-        return formatted
+                formatted_playlists.append(formatted_playlist)
+            
+            return formatted_playlists
+        except Exception as e:
+            logging.error(f"Get playlists error: {e}")
+            raise
     
     def get_playlist_tracks(self, playlist_id: str, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get tracks from a specific playlist with proper error handling"""
-        if not self.ytmusic:
-            raise Exception("YTMusic client not initialized")
-        
-        if not self.authenticated:
-            self.logger.error("Not authenticated - cannot fetch playlist tracks")
-            return []
-        
+        """Get tracks from a playlist"""
         try:
-            self.logger.info(f"Fetching tracks for playlist: {playlist_id}")
+            if not self.ytmusic:
+                raise Exception("YTMusic client not initialized")
+            
+            if not self.authenticated:
+                logging.warning("Not authenticated - cannot fetch playlist tracks")
+                return []
             
             # Handle special playlists
-            if playlist_id == 'HISTORY':
-                tracks = self.ytmusic.get_history()
-            elif playlist_id == 'LM':  # Liked songs
+            if playlist_id == 'LM':  # Liked songs
                 result = self.ytmusic.get_liked_songs(limit=limit)
                 tracks = result.get('tracks', []) if isinstance(result, dict) else result
             else:
-                # Regular playlist - use the correct method
                 result = self.ytmusic.get_playlist(playlist_id, limit=limit)
                 if isinstance(result, dict):
                     tracks = result.get('tracks', [])
                 else:
                     tracks = result
             
-            if not tracks:
-                self.logger.warning(f"No tracks found in playlist {playlist_id}")
-                return []
-            
-            # Format tracks with proper duration extraction
             formatted_tracks = []
             for track in tracks:
                 formatted_track = self._format_track(track)
                 if formatted_track:
                     formatted_tracks.append(formatted_track)
             
-            self.logger.info(f"Successfully fetched {len(formatted_tracks)} tracks")
             return formatted_tracks
-            
         except Exception as e:
-            self.logger.error(f"Error fetching playlist tracks: {e}")
-            # Log more details for debugging
-            self.logger.debug(f"Playlist ID: {playlist_id}")
-            self.logger.debug(f"Error type: {type(e).__name__}")
-            return []
+            logging.error(f"Get playlist tracks error: {e}")
+            raise
+    
+    def get_liked_songs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get user's liked songs"""
+        try:
+            if not self.ytmusic:
+                raise Exception("YTMusic client not initialized")
+            
+            if not self.authenticated:
+                logging.warning("Not authenticated - cannot fetch liked songs")
+                return []
+            
+            result = self.ytmusic.get_liked_songs(limit=limit)
+            tracks = result.get('tracks', []) if isinstance(result, dict) else result
+            
+            formatted_tracks = []
+            for track in tracks:
+                formatted_track = self._format_track(track)
+                if formatted_track:
+                    formatted_tracks.append(formatted_track)
+            
+            return formatted_tracks
+        except Exception as e:
+            logging.error(f"Get liked songs error: {e}")
+            raise
     
     def _format_track(self, track: Dict) -> Optional[Dict[str, Any]]:
         """Format a track with proper duration parsing"""
         try:
             # Extract video ID
-            video_id = None
-            if 'videoId' in track:
-                video_id = track['videoId']
-            elif 'id' in track:
-                video_id = track['id']
-            
+            video_id = track.get('videoId') or track.get('id')
             if not video_id:
-                self.logger.warning("Track missing video ID")
                 return None
             
-            # Extract title and artist
+            # Extract title
             title = track.get('title', 'Unknown Title')
             
-            # Handle different artist formats
+            # Extract artists
             artists = []
             if 'artists' in track and track['artists']:
                 for artist in track['artists']:
@@ -211,55 +190,42 @@ class YouTubeMusicClient:
                         artists.append(artist.get('name', ''))
                     else:
                         artists.append(str(artist))
-            elif 'artist' in track:
-                if isinstance(track['artist'], list):
-                    artists = [a.get('name', str(a)) if isinstance(a, dict) else str(a) 
-                             for a in track['artist']]
-                else:
-                    artists = [str(track['artist'])]
             
             artist_str = ', '.join(filter(None, artists)) or 'Unknown Artist'
             
-            # Parse duration properly
+            # Parse duration
             duration_seconds = self._parse_duration(track)
             
-            # Create formatted track
-            formatted_track = {
+            # Get thumbnail
+            thumbnail = ""
+            if 'thumbnails' in track and track['thumbnails']:
+                thumbnail = track['thumbnails'][0].get('url', '')
+            
+            return {
                 'id': video_id,
                 'title': title,
                 'artist': artist_str,
                 'duration': duration_seconds,
-                'url': f"https://www.youtube.com/watch?v={video_id}"
+                'thumbnail': thumbnail
             }
-            
-            return formatted_track
-            
         except Exception as e:
-            self.logger.warning(f"Error formatting track: {e}")
+            logging.warning(f"Error formatting track: {e}")
             return None
     
     def _parse_duration(self, track: Dict) -> int:
-        """Parse duration from various possible formats"""
-        duration_seconds = 180  # Default fallback
-        
+        """Parse duration from track data"""
         try:
             # Try different duration fields
-            duration_text = None
-            
-            if 'duration' in track:
-                duration_text = track['duration']
-            elif 'duration_seconds' in track:
+            if 'duration_seconds' in track:
                 return int(track['duration_seconds'])
-            elif 'lengthText' in track:
-                duration_text = track['lengthText']
             
+            duration_text = track.get('duration') or track.get('lengthText')
             if duration_text:
-                duration_seconds = self._parse_duration_string(duration_text)
-            
-        except Exception as e:
-            self.logger.debug(f"Could not parse duration, using default: {e}")
+                return self._parse_duration_string(duration_text)
+        except Exception:
+            pass
         
-        return duration_seconds
+        return 180  # Default fallback
     
     def _parse_duration_string(self, duration_str: str) -> int:
         """Parse duration string like '3:45' into seconds"""
@@ -267,7 +233,7 @@ class YouTubeMusicClient:
             if not duration_str or not isinstance(duration_str, str):
                 return 180
             
-            # Remove any non-numeric/colon characters and whitespace
+            # Clean the string
             clean_duration = ''.join(c for c in duration_str if c.isdigit() or c == ':').strip()
             
             if ':' in clean_duration:
@@ -279,72 +245,82 @@ class YouTubeMusicClient:
                     hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
                     return hours * 3600 + minutes * 60 + seconds
             else:
-                # Try to parse as just seconds
                 return int(clean_duration)
-                
         except Exception:
             pass
         
-        return 180  # Default fallback
+        return 180
+
+
+def main():
+    """Main command-line interface"""
+    parser = argparse.ArgumentParser(description='YouTube Music API Bridge')
+    parser.add_argument('command', choices=['search', 'playlists', 'playlist_tracks', 'liked_songs'],
+                       help='Command to execute')
+    parser.add_argument('--query', help='Search query (for search command)')
+    parser.add_argument('--playlist-id', help='Playlist ID (for playlist_tracks command)')
+    parser.add_argument('--filter', default='songs', help='Search filter (default: songs)')
+    parser.add_argument('--limit', type=int, default=20, help='Result limit (default: 20)')
+    parser.add_argument('--cookie', help='Authentication cookie')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     
-    def search_tracks(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
-        """Search for tracks with improved duration handling"""
-        if not self.ytmusic:
-            raise Exception("YTMusic client not initialized")
-        
-        try:
-            self.logger.info(f"Searching for: {query}")
-            
-            # Search for songs specifically
-            results = self.ytmusic.search(query, filter="songs", limit=limit)
-            
-            if not results:
-                self.logger.warning(f"No results found for query: {query}")
-                return []
-            
-            # Format search results
-            formatted_tracks = []
-            for track in results:
-                formatted_track = self._format_track(track)
-                if formatted_track:
-                    formatted_tracks.append(formatted_track)
-            
-            self.logger.info(f"Found {len(formatted_tracks)} tracks")
-            return formatted_tracks
-            
-        except Exception as e:
-            self.logger.error(f"Error searching tracks: {e}")
-            return []
-
-
-# Example usage and testing
-if __name__ == "__main__":
+    args = parser.parse_args()
+    
     # Set up logging
+    log_level = logging.DEBUG if args.debug else logging.WARNING
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s'
     )
     
-    # Initialize client
-    client = YouTubeMusicClient()
+    # Create response structure
+    response = {
+        "success": False,
+        "error": None,
+        "traceback": None
+    }
     
-    # Test playlist fetching
-    print("=== Testing Playlist Fetching ===")
-    playlists = client.get_playlists()
-    for playlist in playlists[:3]:  # Show first 3
-        print(f"Playlist: {playlist['title']} (ID: {playlist['playlistId']})")
+    try:
+        # Initialize the bridge
+        bridge = YouTubeMusicBridge(cookie=args.cookie)
+        
+        # Execute the command
+        if args.command == 'search':
+            if not args.query:
+                raise ValueError("Search query is required")
+            
+            tracks = bridge.search_tracks(args.query, args.limit)
+            response["success"] = True
+            response["tracks"] = tracks
+            
+        elif args.command == 'playlists':
+            playlists = bridge.get_playlists(args.limit)
+            response["success"] = True
+            response["playlists"] = playlists
+            
+        elif args.command == 'playlist_tracks':
+            if not args.playlist_id:
+                raise ValueError("Playlist ID is required")
+            
+            tracks = bridge.get_playlist_tracks(args.playlist_id, args.limit)
+            response["success"] = True
+            response["tracks"] = tracks
+            
+        elif args.command == 'liked_songs':
+            tracks = bridge.get_liked_songs(args.limit)
+            response["success"] = True
+            response["tracks"] = tracks
     
-    # Test search functionality
-    print("\n=== Testing Search ===")
-    tracks = client.search_tracks("gekirin", limit=5)
-    for track in tracks:
-        print(f"Track: {track['title']} - {track['artist']} ({track['duration']}s)")
+    except Exception as e:
+        response["success"] = False
+        response["error"] = str(e)
+        response["traceback"] = str(e)
+        logging.error(f"Command failed: {e}")
     
-    # Test playlist tracks if we have playlists
-    if playlists:
-        print(f"\n=== Testing Playlist Tracks ===")
-        playlist_id = playlists[0]['playlistId']
-        tracks = client.get_playlist_tracks(playlist_id, limit=5)
-        for track in tracks:
-            print(f"Track: {track['title']} - {track['artist']} ({track['duration']}s)")
+    # Output JSON response
+    print(json.dumps(response, indent=2 if args.debug else None))
+
+
+if __name__ == "__main__":
+    main()
 
