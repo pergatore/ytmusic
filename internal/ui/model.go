@@ -28,7 +28,9 @@ var (
 	appStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#ff0000")).
-		Padding(1, 2)
+		Padding(1, 2).
+		AlignHorizontal(lipgloss.Left).
+		AlignVertical(lipgloss.Top)
 
 	titleStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
@@ -114,11 +116,12 @@ func InitialModel(debugMode bool) *Model {
 		Foreground(lipgloss.Color("#000000")).
 		Background(lipgloss.Color("#ff0000"))
 	
-	trackList := list.New([]list.Item{}, trackDelegate, 0, 0)
+	// Initialize track list with default dimensions (will be updated on window size)
+	trackList := list.New([]list.Item{}, trackDelegate, 80, 20)
 	trackList.Title = "YouTube Music - Tracks"
 	trackList.SetShowTitle(true)
 	trackList.SetShowHelp(false)
-	trackList.SetShowStatusBar(true)
+	trackList.SetShowStatusBar(false) // Disable built-in status bar to save space
 	trackList.SetFilteringEnabled(false)
 	trackList.Styles.Title = titleStyle
 	
@@ -126,11 +129,11 @@ func InitialModel(debugMode bool) *Model {
 	playlistDelegate := list.NewDefaultDelegate()
 	playlistDelegate.Styles = trackDelegate.Styles // Reuse the same styling
 	
-	playlistList := list.New([]list.Item{}, playlistDelegate, 0, 0)
+	playlistList := list.New([]list.Item{}, playlistDelegate, 80, 20)
 	playlistList.Title = "YouTube Music - Playlists"
 	playlistList.SetShowTitle(true)
 	playlistList.SetShowHelp(false)
-	playlistList.SetShowStatusBar(true)
+	playlistList.SetShowStatusBar(false) // Disable built-in status bar
 	playlistList.SetFilteringEnabled(false)
 	playlistList.Styles.Title = titleStyle
 	
@@ -142,6 +145,7 @@ func InitialModel(debugMode bool) *Model {
 	
 	// Progress bar
 	p := progress.New(progress.WithDefaultGradient())
+	p.Width = 70 // Default width, will be updated
 	
 	// Spinner
 	s := spinner.New()
@@ -165,6 +169,8 @@ func InitialModel(debugMode bool) *Model {
 		DebugMode:     debugMode,
 		SearchResults: 0,
 		ViewMode:      ViewTracks,
+		Width:         80,  // Default dimensions
+		Height:        24,
 	}
 	
 	// Set the active list to tracks by default
@@ -279,4 +285,3 @@ func ProgressTickCmd() tea.Cmd {
 		return progressMsg{}
 	})
 }
-

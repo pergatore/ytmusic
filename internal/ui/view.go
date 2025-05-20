@@ -22,10 +22,9 @@ func (m *Model) View() string {
 			titleStyle.Render("YouTube Music TUI") + "\n\n" +
 			"You need to log in to YouTube Music to use this application.\n\n" +
 			"Press 'l' to log in or 'q' to quit.\n\n" +
-			"When logging in, you'll need to provide the '__Secure-3PSID' cookie\n" +
-			"from YouTube Music. Instructions will be provided during login.\n\n" +
-			warningStyle.Render("IMPORTANT: Make sure to use the cookie from .youtube.com domain,") + "\n" +
-			warningStyle.Render("NOT from google.com domain."))
+			"When logging in, you'll need to provide authentication via ytmusicapi.\n\n" +
+			warningStyle.Render("Run: ytmusicapi browser --file ~/.ytmusic/headers_auth.json") + "\n" +
+			warningStyle.Render("Then restart the application."))
 	}
 	
 	if m.IsLoading {
@@ -181,4 +180,3 @@ func renderStatusBar(m *Model) string {
 	
 	return statusBarStyle.Render(strings.Join(controls, "  "))
 }
-

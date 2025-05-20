@@ -427,19 +427,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		
-		// Update both lists with the new size
-		m.TrackList.SetWidth(msg.Width - 4)
-		m.PlaylistList.SetWidth(msg.Width - 4)
+		// Update list sizes more conservatively
+		listWidth := msg.Width - 6  // Account for borders and padding
+		listHeight := msg.Height - 12  // Reserve space for other UI elements
 		
-		// Make sure the list height adapts to smaller windows
-		height := msg.Height - 10
-		if height < 3 {
-			height = 3 // Minimum height to show at least one item
+		// Ensure minimum sizes
+		if listWidth < 20 {
+			listWidth = 20
 		}
-		m.TrackList.SetHeight(height)
-		m.PlaylistList.SetHeight(height)
+		if listHeight < 5 {
+			listHeight = 5
+		}
 		
-		m.Progress.Width = msg.Width - 10
+		// Update both lists using SetSize instead of separate Width/Height calls
+		m.TrackList.SetSize(listWidth, listHeight)
+		m.PlaylistList.SetSize(listWidth, listHeight)
+		
+		// Update progress bar width
+		progressWidth := msg.Width - 10
+		if progressWidth < 10 {
+			progressWidth = 10
+		}
+		m.Progress.Width = progressWidth
 		
 		return m, nil
 		
